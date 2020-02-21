@@ -57,17 +57,15 @@ tests = TestList
                      , testLine "op abc # comment" [] (Just $ SdmaInstruction "op" (Symbol "abc") Empty)
                      ]
         , TestLabel "test multiple lines" $
-            TestList [ TestCase $ parseLines "(file)" "label: ldr r0, (r3, 0)\njsr subroutine"
+            TestList [ TestCase $ parseLines "(file)" "label: ldr r0, (r3, 0)\njsr subroutine\n"
                                   @?= Right [(["label"], Just $ SdmaInstruction "ldr" (Symbol "r0") (Indexed 3 (Number 0)),1),
                                              ([],Just $ SdmaInstruction "jsr" (Symbol "subroutine") Empty,2)]
-                     , TestCase $ parseLines "(file)" "\nL: ret\n\nclr"
-                                  @?= Right [([],Nothing,1),
-                                             (["L"],Just $ SdmaInstruction "ret" Empty Empty, 2),
-                                             ([], Nothing, 3),
-                                             ([], Just $ SdmaInstruction "clr" Empty Empty, 4)]
+                     , TestCase $ parseLines "(file)" "\nL: ret\n\nclr\n\nB:"
+                                  @?= Right [(["L"],Just $ SdmaInstruction "ret" Empty Empty, 2),
+                                             ([], Just $ SdmaInstruction "clr" Empty Empty, 4),
+                                             (["B"], Nothing, 6)]
                      , TestCase $ parseLines "(file)" "ldi r0, 0\n\nloop exit, 0\nstart: cli"
                                   @?= Right [([], Just $ SdmaInstruction "ldi" (Symbol "r0") (Number 0), 1),
-                                             ([], Nothing, 2),
                                              ([], Just $ SdmaInstruction "loop" (Symbol "exit") (Number 0), 3),
                                              (["start"], Just $ SdmaInstruction "cli" Empty Empty, 4)]
                      ]

@@ -22,6 +22,7 @@ import Text.Parsec.Expr
 import Data.Char
 import Data.Word
 import Data.Maybe
+import Data.Bifunctor (bimap)
 import Sdma
 
 type LineNumber = Line
@@ -170,7 +171,13 @@ symbolToRegister x = x
 --  Right (Labels, instruction, linenumber)
 --  Left errorinfo -- for syntax error
 parseLines :: String -> String -> Either ParseError [([String], Maybe SdmaInstruction, LineNumber)]
-parseLines filename input = parse asmFile filename input
+parseLines filename input =
+    -- filter out empty lines
+    bimap id (filter (uncurry (||) . (bimap (not . null) isJust) . tripleToPair))
+    $ parse asmFile filename input
+  where
+    tripleToPair (a, b, _) = (a ,b)
+--  bimap id (filter (\(l,s,_) -> ((not . null) l) || (isJust s))) $ parse asmFile filename input
 
 --
 -- Local Variables:
