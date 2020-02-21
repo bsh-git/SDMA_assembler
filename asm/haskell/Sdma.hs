@@ -12,8 +12,12 @@ data SdmaOperand = Register Word8 | -- r0..r7
                    BinaryOp String SdmaOperand SdmaOperand |
 
                    Indexed Word8 SdmaOperand |
+                   LabelRef Int LabelRefDirection |
                    Empty
                    deriving (Show, Eq)
+
+data LabelRefDirection = Forward | Backward
+    deriving (Show, Eq)
 
 data SdmaInstruction = SdmaInstruction {
   siNmemonic :: String,

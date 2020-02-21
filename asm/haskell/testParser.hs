@@ -39,6 +39,12 @@ tests = TestList
                      , testExpr "1 --20" (BinaryOp "-" (Number 1) (UnaryOp "-" (Number 20)))
                      , testExpr "1+2*3" (BinaryOp "+" (Number 1) (BinaryOp "*" (Number 2) (Number 3)))
                      ]
+        , TestLabel "test for expression with ()" $
+            TestList [ testExpr "(3*5)" (BinaryOp "*" (Number 3) (Number 5))
+                     , testExpr "( 3 * 5 )" (BinaryOp "*" (Number 3) (Number 5))
+                     , testExpr "3 * (a + 5)" (BinaryOp "*" (Number 3) (BinaryOp "+" (Symbol "a") (Number 5)))
+                     , testExpr "3 * a + 5" (BinaryOp "+" (BinaryOp "*" (Number 3) (Symbol "a")) (Number 5))
+                     ]
         , TestLabel "test for statement" $
             TestList [ testLine "ret" [] (Just $ SdmaInstruction "ret" Empty Empty)
                      , testLine "addi r4, 10" [] (Just $ SdmaInstruction "addi" (Symbol "r4") (Number 10))
@@ -55,6 +61,8 @@ tests = TestList
                      -- only a label
                      , testLine "  label: # bclri r0, 1" ["label"] Nothing
                      , testLine "op abc # comment" [] (Just $ SdmaInstruction "op" (Symbol "abc") Empty)
+                     -- local label
+                     , testLine "1: jsr 3f" ["1"] (Just $ SdmaInstruction "jsr" (LabelRef 3 Forward) Empty)
                      ]
         , TestLabel "test multiple lines" $
             TestList [ TestCase $ parseLines "(file)" "label: ldr r0, (r3, 0)\njsr subroutine\n"

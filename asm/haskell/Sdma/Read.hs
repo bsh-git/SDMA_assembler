@@ -27,17 +27,6 @@ import Sdma
 
 type LineNumber = Line
 
-number :: GenParser Char st Int
-number = try hexadecimal <|> decimal
-  where
-    hexadecimal =
-      char '0' >> oneOf "xX" >> many1 hexDigit >>= (\s -> return (read ("0x" ++ s) :: Int))
-    decimal =
-      many1 digit >>= (\s -> return (read s :: Int))
-      
-
-
-
 symbol :: Parser String
 symbol = do
     a <- symbolChar
@@ -50,9 +39,14 @@ symbol = do
 skipBlank :: Parser ()
 skipBlank = skipMany (oneOf " \t")
 
+--
+--  Label
+--  foo:
+--  123:    (local label)
+--
 asmLabel :: Parser String
 asmLabel = do
-  a <- symbol
+  a <- symbol <|> many digit
   skipBlank
   _ <- char ':'
   skipBlank
@@ -117,10 +111,6 @@ asmExpression = buildExpressionParser exprTable asmTerm <?> "expression"
         prefix name = Prefix (do {skipBlank; _ <- string name; skipBlank; return (UnaryOp name)})
         binary name assoc = Infix (do {skipBlank; _ <- string name; skipBlank; return (BinaryOp name)}) assoc
 
---unaryOp name = UnaryOp name
---binOp name = BinaryOp name
-
-
 --
 -- parse (Rn, disp)
 --
@@ -140,23 +130,34 @@ indexed = do
     _ -> fail ""
 
 asmTerm :: Parser SdmaOperand
-asmTerm =
-      (do
-          _ <- char '('
-          expr <- asmExpression
-          _ <- char ')'
-          return expr)
-  <|> (do
-          n <- number
-          skipBlank
-          return $ Number n)
-  <|> (do
-          s <- symbol
-          skipBlank
-          return $ Symbol s)
-  <?> "term"
+asmTerm = do
+    t <- term
+    skipBlank
+    return t
+  where
+      term = (do
+                _ <- char '('
+                skipBlank
+                expr <- asmExpression
+                _ <- char ')'
+                return expr)
+             <|> numberOrLocalLabelRef
+             <|> (symbol >>= (return . Symbol))
+             <?> "term"
 
                
+numberOrLocalLabelRef :: Parser SdmaOperand
+numberOrLocalLabelRef = try hexadecimal <|> try labelRef <|> decimal
+  where
+    hexadecimal =
+      char '0' >> oneOf "xX" >> many1 hexDigit >>= (\s -> return (Number (read ("0x" ++ s) :: Int)))
+    decimal =
+      many1 digit >>= (\s -> return (Number (read s :: Int)))
+    labelRef = do
+        d <- many1 digit
+        c <- oneOf "fFbB"
+        return $ LabelRef (read d :: Int) (if c `elem` "fF" then Forward else Backward)
+
 symbolToRegister :: SdmaOperand -> SdmaOperand
 symbolToRegister source@(Symbol s) =
   if not (length s == 2 && (head s) `elem` "rR" && (isDigit . head. tail) s )
