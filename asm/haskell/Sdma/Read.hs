@@ -18,7 +18,6 @@ module Sdma.Read (
 
 import Text.Parsec
 import Text.Parsec.String
-import Text.Parsec.Char
 import Text.Parsec.Expr
 import Data.Char
 import Data.Word
@@ -60,7 +59,7 @@ asmLabel = do
   
 asmComment :: Parser String
 asmComment = 
-  skipBlank >> oneOf "#;" >>  manyTill anyChar (try (lookAhead endOfLine))
+    char '#' >> many (noneOf "\n\r")
 
 asmInstruction :: Parser SdmaInstruction
 asmInstruction = do
@@ -89,9 +88,7 @@ secondOperand = do
 
 asmFile :: Parser [([String], Maybe SdmaInstruction, Line)]
 asmFile = do
-  lns <- asmLine `sepBy` (char '\n')
-  eof
-  return lns
+  asmLine `sepBy` endOfLine
 
 asmLine:: Parser ([String], Maybe SdmaInstruction, Line)
 asmLine = do
@@ -101,7 +98,10 @@ asmLine = do
   skipBlank
   b <- optionMaybe asmInstruction
   optional asmComment
-  return (l, b, sourceLine pos)
+  g <- many (noneOf "\r\n")
+  if null g
+      then return (l, b, sourceLine pos)
+      else unexpected g
 
 
 asmOperand :: Parser SdmaOperand

@@ -54,27 +54,22 @@ tests = TestList
                                 (Just $ SdmaInstruction "bclri" (Symbol "r0") (Number 1))
                      -- only a label
                      , testLine "  label: # bclri r0, 1" ["label"] Nothing
+                     , testLine "op abc # comment" [] (Just $ SdmaInstruction "op" (Symbol "abc") Empty)
                      ]
         , TestLabel "test multiple lines" $
-            TestList [ TestCase (do
-                                    let Right lns = parseLines "(file)"
-                                                            "label: ldr r0, (r3, 0)\njsr subroutine"
-                                    lns @?= [(["label"], Just $ SdmaInstruction "ldr" (Symbol "r0") (Indexed 3 (Number 0)),1),
-                                              ([],Just $ SdmaInstruction "jsr" (Symbol "subroutine") Empty,2)])
-                     , TestCase (do
-                                    let Right lns = parseLines "(file)"
-                                                    "\nL: ret\n\nclr"
-                                    lns @?= [([],Nothing,1),
+            TestList [ TestCase $ parseLines "(file)" "label: ldr r0, (r3, 0)\njsr subroutine"
+                                  @?= Right [(["label"], Just $ SdmaInstruction "ldr" (Symbol "r0") (Indexed 3 (Number 0)),1),
+                                             ([],Just $ SdmaInstruction "jsr" (Symbol "subroutine") Empty,2)]
+                     , TestCase $ parseLines "(file)" "\nL: ret\n\nclr"
+                                  @?= Right [([],Nothing,1),
                                              (["L"],Just $ SdmaInstruction "ret" Empty Empty, 2),
                                              ([], Nothing, 3),
-                                             ([], Just $ SdmaInstruction "clr" Empty Empty, 4)])
-                     , TestCase (do
-                                    let Right lns = parseLines "(file)"
---                                                      "a\nb\nc\nd\n"
---                                                    "start:\n\n     ldi r0, 4\n\nloop exit, 0"
---                                                    "start:\n\n     ldi r0, 4\n\nloop exit, 0"
-                                                    "ldi r0, 0\n\nloop exit, 0\nstart: cli"
-                                    lns @?= [])
+                                             ([], Just $ SdmaInstruction "clr" Empty Empty, 4)]
+                     , TestCase $ parseLines "(file)" "ldi r0, 0\n\nloop exit, 0\nstart: cli"
+                                  @?= Right [([], Just $ SdmaInstruction "ldi" (Symbol "r0") (Number 0), 1),
+                                             ([], Nothing, 2),
+                                             ([], Just $ SdmaInstruction "loop" (Symbol "exit") (Number 0), 3),
+                                             (["start"], Just $ SdmaInstruction "cli" Empty Empty, 4)]
                      ]
           ]
 
@@ -87,8 +82,8 @@ main = do
   where
     parseFile file = do
       putStrLn $ "parse " ++ file
-      lines <- readFile file
-      either (putStr . show) showResults $ parseLines file lines
+      lns <- readFile file
+      either (putStr . show) showResults $ parseLines file lns
     showResults  = mapM_ (putStrLn . show)
 
 
