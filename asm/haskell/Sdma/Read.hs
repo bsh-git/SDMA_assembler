@@ -16,7 +16,8 @@ module Sdma.Read (
 #endif
   ) where
 
-import Text.ParserCombinators.Parsec
+import Text.Parsec
+import Text.Parsec.String
 import Text.Parsec.Char
 import Text.Parsec.Expr
 import Data.Char
@@ -37,7 +38,7 @@ number = try hexadecimal <|> decimal
 
 
 
-symbol :: GenParser Char st String
+symbol :: Parser String
 symbol = do
     a <- symbolChar
     b <- many symbolNumChar
@@ -46,10 +47,10 @@ symbol = do
         symbolNumChar = digit <|> symbolChar
 
 
-skipBlank :: GenParser Char st ()
+skipBlank :: Parser ()
 skipBlank = skipMany (oneOf " \t")
 
-asmLabel :: GenParser Char st String
+asmLabel :: Parser String
 asmLabel = do
   a <- symbol
   skipBlank
@@ -57,42 +58,42 @@ asmLabel = do
   skipBlank
   return a
   
-asmComment :: GenParser Char st String
+asmComment :: Parser String
 asmComment = 
   skipBlank >> oneOf "#;" >>  manyTill anyChar (try (lookAhead endOfLine))
 
-asmInstruction :: GenParser Char st SdmaInstruction
+asmInstruction :: Parser SdmaInstruction
 asmInstruction = do
   skipBlank
   nmemonic <- symbol
   skipBlank
   left <- optionMaybe firstOperand
   if isNothing left
-    then return (SdmaInstruction nmemonic Empty Empty)
+    then return (SdmaInstruction nmemonic Sdma.Empty Sdma.Empty)
     else do
-            right <- try secondOperand <|> (return Empty)
+            right <- try secondOperand <|> (return Sdma.Empty)
             return (SdmaInstruction nmemonic (fromJust left) right)
     
   
-firstOperand ::  GenParser Char st SdmaOperand
+firstOperand ::  Parser SdmaOperand
 firstOperand = do
   -- _ <- many1 space     -- at least one space if we have operands
   asmOperand
   
-secondOperand :: GenParser Char st SdmaOperand
+secondOperand :: Parser SdmaOperand
 secondOperand = do
   skipBlank
   _ <- char ','
   skipBlank
   asmOperand
 
-asmFile :: GenParser Char st [([String], Maybe SdmaInstruction, Line)]
+asmFile :: Parser [([String], Maybe SdmaInstruction, Line)]
 asmFile = do
   lns <- asmLine `sepBy` (char '\n')
   eof
   return lns
 
-asmLine:: GenParser Char st ([String], Maybe SdmaInstruction, Line)
+asmLine:: Parser ([String], Maybe SdmaInstruction, Line)
 asmLine = do
   pos <- getPosition
   skipBlank
@@ -103,10 +104,10 @@ asmLine = do
   return (l, b, sourceLine pos)
 
 
-asmOperand :: GenParser Char st SdmaOperand
+asmOperand :: Parser SdmaOperand
 asmOperand = try indexed <|> asmExpression
 
-asmExpression :: GenParser Char st SdmaOperand
+asmExpression :: Parser SdmaOperand
 asmExpression = buildExpressionParser exprTable asmTerm <?> "expression"
   where exprTable = [ [prefix "-", prefix "+"]
                     , [binary "*" AssocLeft, binary "/" AssocLeft]
@@ -122,7 +123,7 @@ asmExpression = buildExpressionParser exprTable asmTerm <?> "expression"
 --
 -- parse (Rn, disp)
 --
-indexed :: GenParser Char st SdmaOperand
+indexed :: Parser SdmaOperand
 indexed = do
   skipBlank
   _ <- char '('
@@ -137,7 +138,7 @@ indexed = do
     Register n -> return (Indexed n expr)
     _ -> fail ""
 
-asmTerm :: GenParser Char st SdmaOperand
+asmTerm :: Parser SdmaOperand
 asmTerm =
       (do
           _ <- char '('
