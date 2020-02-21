@@ -18,8 +18,6 @@ module Sdma.Read (
 
 import Text.ParserCombinators.Parsec
 import Text.Parsec.Char
-import qualified Text.Parsec.Token as PT
-import Text.Parsec.Language (javaStyle)
 import Text.Parsec.Expr
 import Data.Char
 import Data.Word
@@ -27,21 +25,6 @@ import Data.Maybe
 import Sdma
 
 type LineNumber = Line
-
-{-
-symbolChars = alphaNum <|> char '_'
-symbolNumChars = digit <|> symbolChars
-
-symbol :: GenParser Char st String
-symbol = do
-  a <- symbolChars
-  b <- many symbolNumChars
-  return (a:b)
--}
-
-lexer = PT.makeTokenParser javaStyle
--- number = PT.natural lexer
--- symbol = PT.identifier lexer
 
 number :: GenParser Char st Int
 number = try hexadecimal <|> decimal
@@ -63,6 +46,7 @@ symbol = do
         symbolNumChar = digit <|> symbolChar
 
 
+skipBlank :: GenParser Char st ()
 skipBlank = skipMany (oneOf " \t")
 
 asmLabel :: GenParser Char st String
@@ -73,10 +57,6 @@ asmLabel = do
   skipBlank
   return a
   
---labelOrSymbol :: GenParser Char st String
---labelOrSymbol = do
-
-
 asmComment :: GenParser Char st String
 asmComment = 
   skipBlank >> oneOf "#;" >>  manyTill anyChar (try (lookAhead endOfLine))
@@ -186,16 +166,10 @@ symbolToRegister source@(Symbol s) =
 symbolToRegister x = x
 
 -- returns
---  Right (Label, instruction)
---  Left ""  -- for empty lines
---  Left "error message" -- for syntax error
-parseLines :: String -> String -> Either ParseError [([String], Maybe SdmaInstruction, Line)]
+--  Right (Labels, instruction, linenumber)
+--  Left errorinfo -- for syntax error
+parseLines :: String -> String -> Either ParseError [([String], Maybe SdmaInstruction, LineNumber)]
 parseLines filename input = parse asmFile filename input
-
-  -- split up to (maybe label), nmemonic, operand0, operand1
---  let words = "^\s*(([a-zA-Z_][a-zA-Z_0-9]*)\s*:)?\s*
-
-
 
 --
 -- Local Variables:
