@@ -1,13 +1,13 @@
 --
 --
-module SDMA.UnitTest where
+module Sdma.UnitTest where
 
 import Test.HUnit
 import Text.ParserCombinators.Parsec
 import Text.Parsec.Char
 import System.Environment
-import SDMA
-import SDMA.Read
+import Sdma
+import Sdma.Read
 
 
 parseExpr str = parse asmExpression "(file)" str
@@ -52,18 +52,18 @@ tests = TestList
                      , testExpr "1+2*3" (BinaryOp "+" (Number 1) (BinaryOp "*" (Number 2) (Number 3)))
                      ]
         , TestLabel "test for statement" $
-            TestList [ testLine "ret" [] (Just $ SDMAInstruction "ret" Empty Empty)
-                     , testLine "addi r4, 10" [] (Just $ SDMAInstruction "addi" (Symbol "r4") (Number 10))
-                     , testLine "rorb r5" [] (Just $ SDMAInstruction "rorb" (Symbol "r5") Empty)
-                     , testLine "ld  r0,(r1,4)" [] (Just $ SDMAInstruction "ld" (Symbol "r0")
+            TestList [ testLine "ret" [] (Just $ SdmaInstruction "ret" Empty Empty)
+                     , testLine "addi r4, 10" [] (Just $ SdmaInstruction "addi" (Symbol "r4") (Number 10))
+                     , testLine "rorb r5" [] (Just $ SdmaInstruction "rorb" (Symbol "r5") Empty)
+                     , testLine "ld  r0,(r1,4)" [] (Just $ SdmaInstruction "ld" (Symbol "r0")
                                                                                 (Indexed 1 (Number 4)))
                      , testLine "label:bclri r0, 1" ["label"]
-                                (Just $ SDMAInstruction "bclri" (Symbol "r0") (Number 1))
+                                (Just $ SdmaInstruction "bclri" (Symbol "r0") (Number 1))
                      , testLine "label: \tbclri r0, 1" ["label"]
-                                (Just $ SDMAInstruction "bclri" (Symbol "r0") (Number 1))
+                                (Just $ SdmaInstruction "bclri" (Symbol "r0") (Number 1))
                      -- two labels at a line
                      , testLine "  label1: label2: bclri r0, 1" ["label1", "label2"]
-                                (Just $ SDMAInstruction "bclri" (Symbol "r0") (Number 1))
+                                (Just $ SdmaInstruction "bclri" (Symbol "r0") (Number 1))
                      -- only a label
                      , testLine "  label: # bclri r0, 1" ["label"] Nothing
                      ]
@@ -71,15 +71,15 @@ tests = TestList
             TestList [ TestCase (do
                                     let Right lns = parse asmFile "(file)"
                                                             "label: ldr r0, (r3, 0)\njsr subroutine"
-                                    lns @?= [(["label"], Just $ SDMAInstruction "ldr" (Symbol "r0") (Indexed 3 (Number 0)),1),
-                                              ([],Just $ SDMAInstruction "jsr" (Symbol "subroutine") Empty,2)])
+                                    lns @?= [(["label"], Just $ SdmaInstruction "ldr" (Symbol "r0") (Indexed 3 (Number 0)),1),
+                                              ([],Just $ SdmaInstruction "jsr" (Symbol "subroutine") Empty,2)])
                      , TestCase (do
                                     let Right lns = parse asmFile "(file)"
                                                     "\nL: ret\n\nclr"
                                     lns @?= [([],Nothing,1),
-                                             (["L"],Just $ SDMAInstruction "ret" Empty Empty, 2),
+                                             (["L"],Just $ SdmaInstruction "ret" Empty Empty, 2),
                                              ([], Nothing, 3),
-                                             ([], Just $ SDMAInstruction "clr" Empty Empty, 4)])
+                                             ([], Just $ SdmaInstruction "clr" Empty Empty, 4)])
                      , TestCase (do
                                     let Right lns = parse asmFile "(file)"
 --                                                      "a\nb\nc\nd\n"

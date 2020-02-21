@@ -1,24 +1,24 @@
 --
 --
-module SDMA where
+module Sdma where
 
 import Data.Word
 
-data SDMAOperand = Register Word8 | -- r0..r7
+data SdmaOperand = Register Word8 | -- r0..r7
                    Number Int |
 
                    Symbol String |
-                   UnaryOp String SDMAOperand |
-                   BinaryOp String SDMAOperand SDMAOperand |
+                   UnaryOp String SdmaOperand |
+                   BinaryOp String SdmaOperand SdmaOperand |
 
-                   Indexed Word8 SDMAOperand |
+                   Indexed Word8 SdmaOperand |
                    Empty
                    deriving (Show, Eq)
 
-data SDMAInstruction = SDMAInstruction {
+data SdmaInstruction = SdmaInstruction {
   siNmemonic :: String,
-  siOperand0 :: SDMAOperand,
-  siOperand1 :: SDMAOperand
+  siOperand0 :: SdmaOperand,
+  siOperand1 :: SdmaOperand
   }
   deriving (Eq, Show)
 
