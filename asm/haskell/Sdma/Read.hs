@@ -4,15 +4,15 @@
 --
 
 module Sdma.Read (
-  parseLines,
-  LineNumber
+    parseLines
+  , LineNumber
+  , symbolToRegister
 #ifdef UnitTestInternal
   , asmOperand
   , asmExpression
   , asmTerm
   , asmLine
   , asmFile
-  , symbolToRegister
 #endif
   ) where
 

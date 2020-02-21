@@ -3,18 +3,20 @@
 module Sdma.UnitTest where
 
 import Test.HUnit
-import Text.ParserCombinators.Parsec
-import Text.Parsec.Char
 import System.Environment
 import Sdma
 import Sdma.Read
+import Data.Either.Combinators (fromRight')
 
 
-parseExpr str = parse asmExpression "(file)" str
-parseOperand str = parse asmOperand "(file)" str
+--parseExpr str = parse asmExpression "(file)" str
+parseLine = head . fromRight' . (parseLines "(file)")
+parseExpr str = let (_,Just (SdmaInstruction "OP" expr Empty),_) = parseLine $ "OP " ++ str
+                in expr
 
-testExpr str expect = TestCase $  Right expect @=? parse asmExpression "(file)" str
-testLine str labels expect = TestCase $ Right (labels, expect, 1) @=? parse asmLine "(file)" str
+testExpr str expect = TestCase $ expect @=? (parseExpr str)
+testLine str labels expect = TestCase $ (labels, expect, 1) @=? parseLine str
+
 
 tests :: Test
 tests = TestList
@@ -24,25 +26,11 @@ tests = TestList
                      , testExpr "0xabcd" (Number 0xabcd)
                      -- not octal
                      , testExpr "010" (Number 10)
-                     , TestCase (do
-                                    let Right e = parseExpr "r3"
-                                    case e of
-                                      Symbol _ ->
-                                        case symbolToRegister e of
-                                          Register r -> r @?= 3
-                                          _ -> assertFailure "register r3"
-                                      _ -> assertFailure "register r3")
-                     , testExpr "(125)" (Number 125)
                      , testExpr "-5" (UnaryOp "-" (Number (5)))
+                     , TestCase $ (Register 3) @?= symbolToRegister (parseExpr "r3")
                      ]
         , TestLabel "test for (reg, disp)" $
-            TestList [ TestCase (do
-                                    let Right e = parseOperand "(r5, 32)"
-                                    case e of
-                                      Indexed reg (Number disp) ->
-                                        reg == 5 && disp == 32 @? "(r5, 32)" ++ (show e)
-                                      _ -> assertFailure "(r5, 32)")
-
+            TestList [ testExpr "(r5, 32)" (Indexed 5 (Number 32))
                         ]
         , TestLabel "test for binary op" $
             TestList [ testExpr "1+2" (BinaryOp "+" (Number 1) (Number 2))
@@ -69,19 +57,19 @@ tests = TestList
                      ]
         , TestLabel "test multiple lines" $
             TestList [ TestCase (do
-                                    let Right lns = parse asmFile "(file)"
+                                    let Right lns = parseLines "(file)"
                                                             "label: ldr r0, (r3, 0)\njsr subroutine"
                                     lns @?= [(["label"], Just $ SdmaInstruction "ldr" (Symbol "r0") (Indexed 3 (Number 0)),1),
                                               ([],Just $ SdmaInstruction "jsr" (Symbol "subroutine") Empty,2)])
                      , TestCase (do
-                                    let Right lns = parse asmFile "(file)"
+                                    let Right lns = parseLines "(file)"
                                                     "\nL: ret\n\nclr"
                                     lns @?= [([],Nothing,1),
                                              (["L"],Just $ SdmaInstruction "ret" Empty Empty, 2),
                                              ([], Nothing, 3),
                                              ([], Just $ SdmaInstruction "clr" Empty Empty, 4)])
                      , TestCase (do
-                                    let Right lns = parse asmFile "(file)"
+                                    let Right lns = parseLines "(file)"
 --                                                      "a\nb\nc\nd\n"
 --                                                    "start:\n\n     ldi r0, 4\n\nloop exit, 0"
 --                                                    "start:\n\n     ldi r0, 4\n\nloop exit, 0"
