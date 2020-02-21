@@ -82,7 +82,7 @@ tests = TestList
 
 
 main :: IO ()
-main = do
+main =
     runTestTT tests >>  getArgs >>= mapM_ parseFile
 
   where
