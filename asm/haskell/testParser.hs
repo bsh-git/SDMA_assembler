@@ -2,7 +2,7 @@
 --
 module Sdma.UnitTest where
 
-import Test.HUnit
+import Test.HUnit hiding (Label)
 import System.Environment
 import Sdma
 import Sdma.Read
@@ -10,12 +10,17 @@ import Data.Either.Combinators (fromRight')
 
 
 --parseExpr str = parse asmExpression "(file)" str
-parseLine = head . fromRight' . (parseLines "(file)")
-parseExpr str = let (_,Just (SdmaInstruction "OP" expr Empty),_) = parseLine $ "OP " ++ str
-                in expr
+parseLine lns = do
+    result <- parseLines "(file)" lns
+    return $ head result
+parseExpr str = do
+    result <- parseLines "(file)" ("OP " ++ str)
+    case head result of
+      (_,Just (SdmaInstruction "OP" expr Empty),_) -> return expr
+      _ -> error $ "parser failed for expression " ++ str
 
-testExpr str expect = TestCase $ expect @=? (parseExpr str)
-testLine str labels expect = TestCase $ (labels, expect, 1) @=? parseLine str
+testExpr str expect = TestCase $ Right expect @=? (parseExpr str)
+testLine str labels expect = TestCase $ Right (labels, expect, 1) @=? parseLine str
 
 
 tests :: Test
@@ -27,7 +32,7 @@ tests = TestList
                      -- not octal
                      , testExpr "010" (Number 10)
                      , testExpr "-5" (UnaryOp "-" (Number (5)))
-                     , TestCase $ (Register 3) @?= symbolToRegister (parseExpr "r3")
+                     , TestCase $ (Register 3) @?= symbolToRegister (fromRight' (parseExpr "r3"))
                      ]
         , TestLabel "test for (reg, disp)" $
             TestList [ testExpr "(r5, 32)" (Indexed 5 (Number 32))
@@ -51,31 +56,33 @@ tests = TestList
                      , testLine "rorb r5" [] (Just $ SdmaInstruction "rorb" (Symbol "r5") Empty)
                      , testLine "ld  r0,(r1,4)" [] (Just $ SdmaInstruction "ld" (Symbol "r0")
                                                                                 (Indexed 1 (Number 4)))
-                     , testLine "label:bclri r0, 1" ["label"]
+                     , testLine "label:bclri r0, 1" [Label "label"]
                                 (Just $ SdmaInstruction "bclri" (Symbol "r0") (Number 1))
-                     , testLine "label: \tbclri r0, 1" ["label"]
+                     , testLine "label: \tbclri r0, 1" [Label "label"]
                                 (Just $ SdmaInstruction "bclri" (Symbol "r0") (Number 1))
                      -- two labels at a line
-                     , testLine "  label1: label2: bclri r0, 1" ["label1", "label2"]
+                     , testLine "label1:label2: bclri r0, 1" [Label "label1", Label "label2"]
+                                (Just $ SdmaInstruction "bclri" (Symbol "r0") (Number 1))
+                     , testLine "  1: 2: bclri r0, 1" [LocalLabel 1, LocalLabel 2]
                                 (Just $ SdmaInstruction "bclri" (Symbol "r0") (Number 1))
                      -- only a label
-                     , testLine "  label: # bclri r0, 1" ["label"] Nothing
+                     , testLine "  label: # bclri r0, 1" [Label "label"] Nothing
                      , testLine "op abc # comment" [] (Just $ SdmaInstruction "op" (Symbol "abc") Empty)
                      -- local label
-                     , testLine "1: jsr 3f" ["1"] (Just $ SdmaInstruction "jsr" (LabelRef 3 Forward) Empty)
+                     , testLine "1: jsr 3f" [LocalLabel 1] (Just $ SdmaInstruction "jsr" (LabelRef 3 Forward) Empty)
                      ]
         , TestLabel "test multiple lines" $
             TestList [ TestCase $ parseLines "(file)" "label: ldr r0, (r3, 0)\njsr subroutine\n"
-                                  @?= Right [(["label"], Just $ SdmaInstruction "ldr" (Symbol "r0") (Indexed 3 (Number 0)),1),
+                                  @?= Right [([Label "label"], Just $ SdmaInstruction "ldr" (Symbol "r0") (Indexed 3 (Number 0)),1),
                                              ([],Just $ SdmaInstruction "jsr" (Symbol "subroutine") Empty,2)]
                      , TestCase $ parseLines "(file)" "\nL: ret\n\nclr\n\nB:"
-                                  @?= Right [(["L"],Just $ SdmaInstruction "ret" Empty Empty, 2),
+                                  @?= Right [([Label "L"],Just $ SdmaInstruction "ret" Empty Empty, 2),
                                              ([], Just $ SdmaInstruction "clr" Empty Empty, 4),
-                                             (["B"], Nothing, 6)]
+                                             ([Label "B"], Nothing, 6)]
                      , TestCase $ parseLines "(file)" "ldi r0, 0\n\nloop exit, 0\nstart: cli"
                                   @?= Right [([], Just $ SdmaInstruction "ldi" (Symbol "r0") (Number 0), 1),
                                              ([], Just $ SdmaInstruction "loop" (Symbol "exit") (Number 0), 3),
-                                             (["start"], Just $ SdmaInstruction "cli" Empty Empty, 4)]
+                                             ([Label "start"], Just $ SdmaInstruction "cli" Empty Empty, 4)]
                      ]
           ]
 

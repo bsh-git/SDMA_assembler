@@ -18,10 +18,10 @@ data SdmaOperand = Register Word8 | -- r0..r7
                    Indexed Word8 SdmaOperand |
                    LabelRef Int LabelRefDirection |
                    Empty
-                   deriving (Show, Eq)
+                   deriving (Eq, Show)
 
 data LabelRefDirection = Forward | Backward
-    deriving (Show, Eq)
+    deriving (Eq, Show)
 
 data SdmaInstruction = SdmaInstruction {
   siNmemonic :: String,
@@ -30,6 +30,11 @@ data SdmaInstruction = SdmaInstruction {
   }
   deriving (Eq, Show)
 
+data Label = Label String
+           | LocalLabel Int
+    deriving (Eq, Show)
+
+type InstructionLine = ([Label], Maybe SdmaInstruction, LineNumber)
 
 symbolToRegister :: SdmaOperand -> SdmaOperand
 symbolToRegister source@(Symbol s) =

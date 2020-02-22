@@ -5,7 +5,6 @@
 
 module Sdma.Read (
     parseLines
-  , LineNumber
   , symbolToRegister
 #ifdef UnitTestInternal
   , asmOperand
@@ -19,8 +18,6 @@ module Sdma.Read (
 import Text.Parsec
 import Text.Parsec.String
 import Text.Parsec.Expr
-import Data.Char
-import Data.Word
 import Data.Maybe
 import Data.Bifunctor (bimap)
 import Sdma
@@ -42,15 +39,24 @@ skipBlank = skipMany (oneOf " \t")
 --  foo:
 --  123:    (local label)
 --
-asmLabel :: Parser String
-asmLabel = do
-  a <- symbol <|> many digit
-  skipBlank
-  _ <- char ':'
-  skipBlank
-  if all isDigit a
-     then return $ show ((read a) :: Int)
-     else return a
+asmLabel :: Parser Label
+asmLabel = localLabel <|> nonLocalLabel
+
+localLabel :: Parser Label
+localLabel = do
+    a <- many1 digit
+    skipBlank
+    _ <- char ':'
+    skipBlank
+    return $ LocalLabel (read a :: Int)
+
+nonLocalLabel :: Parser Label
+nonLocalLabel = do
+    a <- symbol
+    skipBlank
+    _ <- char ':'
+    skipBlank
+    return $ Label a
   
 asmComment :: Parser String
 asmComment = 
@@ -81,11 +87,11 @@ secondOperand = do
   skipBlank
   asmOperand
 
-asmFile :: Parser [([String], Maybe SdmaInstruction, Line)]
+asmFile :: Parser [InstructionLine]
 asmFile = do
   asmLine `sepBy` endOfLine
 
-asmLine:: Parser ([String], Maybe SdmaInstruction, Line)
+asmLine:: Parser InstructionLine
 asmLine = do
   pos <- getPosition
   skipBlank
@@ -162,7 +168,7 @@ numberOrLocalLabelRef = try hexadecimal <|> try labelRef <|> decimal
 -- returns
 --  Right (Labels, instruction, linenumber)
 --  Left errorinfo -- for syntax error
-parseLines :: String -> String -> Either ParseError [([String], Maybe SdmaInstruction, LineNumber)]
+parseLines :: String -> String -> Either ParseError [InstructionLine]
 parseLines filename input =
     -- filter out empty lines
     bimap id (filter (uncurry (||) . (bimap (not . null) isJust) . tripleToPair))
