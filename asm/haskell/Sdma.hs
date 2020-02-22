@@ -3,6 +3,10 @@
 module Sdma where
 
 import Data.Word
+import Text.Parsec (Line)
+import Data.Char (isDigit)
+
+type LineNumber = Line
 
 data SdmaOperand = Register Word8 | -- r0..r7
                    Number Int |
@@ -25,6 +29,17 @@ data SdmaInstruction = SdmaInstruction {
   siOperand1 :: SdmaOperand
   }
   deriving (Eq, Show)
+
+
+symbolToRegister :: SdmaOperand -> SdmaOperand
+symbolToRegister source@(Symbol s) =
+  if not (length s == 2 && (head s) `elem` "rR" && (isDigit . head. tail) s )
+  then
+    source
+  else
+    Register (read (tail s) :: Word8)
+
+symbolToRegister x = x
 
 
 --

@@ -25,8 +25,6 @@ import Data.Maybe
 import Data.Bifunctor (bimap)
 import Sdma
 
-type LineNumber = Line
-
 symbol :: Parser String
 symbol = do
     a <- symbolChar
@@ -50,7 +48,9 @@ asmLabel = do
   skipBlank
   _ <- char ':'
   skipBlank
-  return a
+  if all isDigit a
+     then return $ show ((read a) :: Int)
+     else return a
   
 asmComment :: Parser String
 asmComment = 
@@ -158,15 +158,6 @@ numberOrLocalLabelRef = try hexadecimal <|> try labelRef <|> decimal
         c <- oneOf "fFbB"
         return $ LabelRef (read d :: Int) (if c `elem` "fF" then Forward else Backward)
 
-symbolToRegister :: SdmaOperand -> SdmaOperand
-symbolToRegister source@(Symbol s) =
-  if not (length s == 2 && (head s) `elem` "rR" && (isDigit . head. tail) s )
-  then
-    source
-  else
-    Register (read (tail s) :: Word8)
-
-symbolToRegister x = x
 
 -- returns
 --  Right (Labels, instruction, linenumber)
