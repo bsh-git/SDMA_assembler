@@ -1,4 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TypeFamilies #-}
+
 --
 --
 module Sdma.UnitTest where
@@ -6,7 +8,8 @@ module Sdma.UnitTest where
 import Test.HUnit hiding (Label)
 --import System.Environment
 import Sdma.Parser
-import Text.Megaparsec
+import Text.Megaparsec hiding (Label)
+import Data.Text
 
 at :: Int -> Int -> Int -> a -> WithPos a
 at line col len tok = WithPos (SourcePos "" (mkPos line) (mkPos col)) tok
@@ -14,8 +17,13 @@ at line col len tok = WithPos (SourcePos "" (mkPos line) (mkPos col)) tok
 eol :: Int -> Int -> Int -> WithPos AsmToken
 eol line col _ = WithPos (SourcePos "" (mkPos line) (mkPos col)) Eol
 
-testExpr str expect = TestCase $ Right expect @=? (parseExpr "" str)
---testLine str labels expect = TestCase $ Right (labels, expect, 1) @=? parseLine str
+testExpr str expect = TestCase $ Right expect @=? (parseOperand "" str)
+
+--[AsmLine labels Nothing]
+testEmptyLine :: Text -> [WithPos Label] -> Test
+testEmptyLine str labels = TestCase $ Right [AsmLine labels Nothing] @=? (parseSdmaAsm "" str)
+testLine :: Text -> [WithPos Label] -> WithPos String -> [AsmExpr] -> Test
+testLine str labels insn oprs = TestCase $ Right [(AsmLine labels (Just $ Statement insn oprs))] @=? (parseSdmaAsm "" str)
 
 tests :: Test
 tests = TestList
@@ -78,6 +86,46 @@ tests = TestList
                                                          (Leaf (at 1 11 1 (Number 2))))
                                                        (Leaf (at 1 17 1 (Number 5)))
                                                      )
+                     ]
+        , TestLabel "test for statement" $
+            TestList [ testEmptyLine "" []
+                     , testEmptyLine " label1: label2:label3:   # comment"
+                                     [(at 1 2 7 (Label "label1")),
+                                      (at 1 10 7 (Label "label2")),
+                                      (at 1 17 7 (Label "label3"))]
+                     , testEmptyLine "10: 11:123:   # comment"
+                                     [(at 1 1 3 (LocalLabel 10)),
+                                      (at 1 5 3 (LocalLabel 11)),
+                                      (at 1 8 4 (LocalLabel 123))]
+
+                     , testLine "ret" [] (at 1 1 3 "ret") []
+                     , testLine "rorb r5" [] (at 1 1 4 "rorb")
+                                [Register (at 1 6 2  5)]
+                     , testLine "addi r4, 10" [] (at 1 1 4 "addi")
+                                [ Register (at 1 6 2 4)
+                                , Leaf (at 1 10 2 (Number 10))
+                                ]
+
+                     , testLine "ld   r1, (r2, -4)" [] (at 1 1 2 "ld")
+                                [ Register (at 1 6 2 1)
+                                , Indexed (Register (at 1 11 2 2))
+                                          (UnaryExpr (at 1 15 1 "-")
+                                           (Leaf (at 1 16 1 (Number 4))))
+                                ]
+                     , testLine "addi r7, foo + 3*(bar-5)" [] (at 1 1 4 "addi")
+                                [ Register (at 1 6 2 7)
+                                , BinaryExpr (at 1 14 1 "+")
+                                  (Leaf (at 1 10 3 (Identifier "foo")))
+                                  (BinaryExpr (at 1 17 1 "*")
+                                   (Leaf (at 1 16 1 (Number 3)))
+                                   (BinaryExpr (at 1 22 1 "-")
+                                    (Leaf (at 1 19 3 (Identifier "bar")))
+                                    (Leaf (at 1 23 1 (Number 5))))
+                                  )
+                                ]
+
+                     , testLine "label: ret" [(at 1 1 6 (Label "label"))]
+                                             (at 1 8 3 "ret") []
                      ]
         ]
 

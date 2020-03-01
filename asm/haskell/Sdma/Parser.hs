@@ -5,9 +5,13 @@
 module Sdma.Parser ( AsmExpr(..)
                    , AsmToken(..)
                    , WithPos(..)
+                   , Label(..)
                    , LabelRefDirection(..)
+                   , AsmLine(..)
+                   , Statement(..)
+                   , parseSdmaAsm
                    , tokenize
-                   , parseExpr
+                   , parseOperand
                    ) where
 
 import Data.Text (Text)
@@ -17,15 +21,15 @@ import Data.List (foldl')
 import Data.Functor (void)
 import Data.Either
 import Data.Text (append, unpack)
+import Data.Word
 import Control.Monad.HT (lift2)
-import Text.Megaparsec
-import Text.Megaparsec.Error
-import Text.Megaparsec.Char hiding (symbolChar)
+import Text.Megaparsec hiding (Label, label)
+--import Text.Megaparsec.Error
+import Text.Megaparsec.Char -- hiding (symbolChar)
 --import Text.Megaparsec.Pos
 import qualified Text.Megaparsec.Char.Lexer as L
 import Control.Monad.Combinators.Expr
 import Text.Megaparsec.Debug
-
 
 data WithPos a = WithPos
   { startPos :: SourcePos
@@ -37,6 +41,63 @@ data WithPos a = WithPos
 
 type Parser = Parsec Void Text
 
+parseSdmaAsm :: FilePath -> Text -> Either (ParseErrorBundle Text Void) [AsmLine]
+parseSdmaAsm fn input = parse (asmFile <* eof) fn input
+
+
+asmFile :: Parser [AsmLine]
+asmFile = asmLine `sepBy` (void eol <|> void semiColon)
+  where
+    semiColon = some (char ';')
+
+--
+-- statement
+--
+--  label: label2: op exp1, exp2 #comment
+--
+data AsmLine = AsmLine
+    { alLabels :: [WithPos Label]
+    , alStatement :: Maybe Statement
+    } deriving (Eq, Show)
+    
+
+data Statement = Statement
+    { stNemonic :: (WithPos String)
+    , stOperands :: [AsmExpr]
+    } deriving (Eq, Show)
+
+asmLine :: Parser AsmLine
+asmLine = do
+    sc
+    lbls <- (many (try label))
+    insn <- option Nothing (try statement)
+    return $ AsmLine lbls insn
+
+statement :: Parser (Maybe Statement)
+statement = do
+    insn <- withPos identifierChars
+    sc
+    opr <- operand `sepBy` (char ',' >> sc)
+    return $ Just $ Statement insn opr
+
+--
+--  Label
+--  foo:
+--  123:    (local label)
+--
+data Label = Label String
+           | LocalLabel Int
+    deriving (Eq, Show)
+
+
+label :: Parser (WithPos Label)
+label = withPos (label' identifierChars Label
+                    <|> label' (many digitChar) (buildToken LocalLabel 10))
+  where
+    label' :: Parser String -> (String -> Label) -> (Parser Label)
+    label' p f = f `fmap` (p <* (sc >> char ':' >> sc))
+
+
 --
 -- Expression
 --
@@ -44,11 +105,14 @@ data AsmExpr
   = Leaf (WithPos AsmToken)
   | UnaryExpr (WithPos String) AsmExpr
   | BinaryExpr (WithPos String) AsmExpr AsmExpr
+  -- followings are allowed only at the top level
+  | Indexed AsmExpr AsmExpr -- (Rn, N):
+  | Register (WithPos Word8)
   deriving (Eq, Show)
 
 
-parseExpr :: FilePath -> Text -> Either (ParseErrorBundle Text Void) AsmExpr
-parseExpr fn input = parse (blanks >> expr <* eof) fn input
+parseOperand :: FilePath -> Text -> Either (ParseErrorBundle Text Void) AsmExpr
+parseOperand fn input = parse (blanks >> operand <* eof) fn input
 
 
 operatorTable :: [[Operator Parser AsmExpr]]
@@ -82,10 +146,6 @@ binary  c = InfixL (binaryExpr (char c))
         _ <- op
         sc
         return $ BinaryExpr (WithPos pos [c])
-
-        
-
-
 expr :: Parser AsmExpr
 expr = makeExprParser term operatorTable
 
@@ -98,6 +158,33 @@ parens = between (char '(' >> sc) (char ')' >> sc)
 tokenToExpr p = do
   a <- lexeme p
   return $ Leaf a
+
+operand :: Parser AsmExpr
+operand = try (parens indexedAddressing) <|> try register <|> expr
+  where
+    indexedAddressing = do
+        reg <- register
+        void $ char ','
+        sc
+        e <- expr
+        return $ Indexed reg e
+
+
+register :: Parser AsmExpr
+register = lexeme identifier >>= register'
+  where
+    register' (WithPos pos (Identifier regname)) =
+        if length regname /= 2 || toLower (head regname) /= 'r'
+        then fail "not register"
+        else let regnum = digitToInt (head (tail regname))
+             in
+               if regnum <= 7
+               then return $ Register (WithPos pos (fromIntegral regnum))
+               else fail "invalid register number"
+    register' _ = fail "not register"
+                
+
+    
 
 --
 -- Token
@@ -114,7 +201,6 @@ data AsmToken
 
 data LabelRefDirection = Forward | Backward
     deriving (Eq, Show)
-
 
 tokenize :: FilePath -> Text -> [WithPos AsmToken]
 tokenize fn input = either parseError id $ parse lexer fn input
@@ -134,7 +220,6 @@ blanks = void $ takeWhileP Nothing isBlank
 
 sc :: Parser ()
 sc = L.space blank1 (L.skipLineComment "#") (L.skipBlockComment "/*" "*/")
-
 
 withPos :: Parser a -> Parser (WithPos a)
 withPos p = do
@@ -168,7 +253,10 @@ symbolToken :: Parser AsmToken
 symbolToken = oneOf' "()-+*%/;" >>= (return . Symbol . (:[]))
 
 identifier :: Parser AsmToken
-identifier = lift2 (:) idChar0 (many idChar) >>= (return . Identifier)
+identifier = Identifier `fmap` identifierChars
+
+identifierChars :: Parser String
+identifierChars = lift2 (:) idChar0 (many idChar)
   where
     idChar0 = letterChar  <|> oneOf' "_."
     idChar = idChar0 <|> digitChar
@@ -194,7 +282,7 @@ numberOrLocalLabelRef = try hexadecimalNumber <|> try binaryNumber <|> decimalNu
     digitsToNumber base = buildToken Number base
     digitsToLabel dir = buildToken (LocalLabelRef dir) 10
 
-    buildToken t base = t . fromIntegral . (foldl' (\sm d -> sm * base + digitToInt d) 0)
+buildToken t base = t . fromIntegral . (foldl' (\sm d -> sm * base + digitToInt d) 0)
 
 unknown :: Parser AsmToken
 unknown = anySingle <* skipMany (noneOf' "\r\n") >>= return . Unknown
