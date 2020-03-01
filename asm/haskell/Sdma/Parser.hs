@@ -12,6 +12,7 @@ module Sdma.Parser ( AsmExpr(..)
                    , parseSdmaAsm
                    , tokenize
                    , parseOperand
+                   , module Text.Megaparsec
                    ) where
 
 import Data.Text (Text)
@@ -62,7 +63,7 @@ data AsmLine = AsmLine
     
 
 data Statement = Statement
-    { stNemonic :: (WithPos String)
+    { stNmemonic :: (WithPos String)
     , stOperands :: [AsmExpr]
     } deriving (Eq, Show)
 
@@ -96,6 +97,7 @@ label = withPos (label' identifierChars Label
   where
     label' :: Parser String -> (String -> Label) -> (Parser Label)
     label' p f = f `fmap` (p <* (sc >> char ':' >> sc))
+
 
 
 --
