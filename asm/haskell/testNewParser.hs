@@ -60,6 +60,10 @@ tests = TestList
                                           (Leaf (at 1 1 1 (Number 5)))
                                           (UnaryExpr (at 1 3 1 "-") (Leaf (at 1 4 1 (Identifier "abc"))))
                                          )
+                     , testExpr "3f-5b" (BinaryExpr (at 1 3 1 "-")
+                                          (Leaf (at 1 1 1 (LocalLabelRef Forward 3)))
+                                          (Leaf (at 1 4 1 (LocalLabelRef Backward 5)))
+                                         )
                      ]
         ]
 

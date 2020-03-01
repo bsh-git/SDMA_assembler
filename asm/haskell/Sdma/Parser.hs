@@ -5,6 +5,7 @@
 module Sdma.Parser ( AsmExpr(..)
                    , AsmToken(..)
                    , WithPos(..)
+                   , LabelRefDirection(..)
                    , tokenize
                    , parseExpr
                    ) where
@@ -14,8 +15,11 @@ import Data.Void
 import Data.Char
 import Data.List (foldl')
 import Data.Functor (void)
+import Data.Either
+import Data.Text (append, unpack)
 import Control.Monad.HT (lift2)
 import Text.Megaparsec
+import Text.Megaparsec.Error
 import Text.Megaparsec.Char hiding (symbolChar)
 --import Text.Megaparsec.Pos
 import qualified Text.Megaparsec.Char.Lexer as L
@@ -44,7 +48,7 @@ data AsmExpr
 
 
 parseExpr :: FilePath -> Text -> Either (ParseErrorBundle Text Void) AsmExpr
-parseExpr fn input = parse (blanks >> expr) fn input
+parseExpr fn input = parse (blanks >> expr <* eof) fn input
 
 
 operatorTable :: [[Operator Parser AsmExpr]]
@@ -85,7 +89,7 @@ expr :: Parser AsmExpr
 expr = makeExprParser term operatorTable
 
 term :: Parser AsmExpr
-term = tokenToExpr identifier <|> tokenToExpr number
+term = tokenToExpr identifier <|> tokenToExpr numberOrLocalLabelRef
 
 tokenToExpr p = do
   a <- lexeme p
@@ -98,11 +102,14 @@ data AsmToken
   = Eol
   | Identifier String
   | Number Word
-  | LocalLabelRef Word
+  | LocalLabelRef LabelRefDirection Word
   -- Items below are defined to tokenize all input. they are not used by the parser above.
   | Symbol String
   | Unknown Char
   deriving (Eq, Show)
+
+data LabelRefDirection = Forward | Backward
+    deriving (Eq, Show)
 
 
 tokenize :: FilePath -> Text -> [WithPos AsmToken]
@@ -135,7 +142,7 @@ withPos p = do
 lexer :: Parser [WithPos AsmToken]
 lexer = do
   blanks
-  a <- many (lexeme (eols <|> identifier <|> number  <|> symbolToken <|> unknown))
+  a <- many (lexeme (eols <|> identifier <|> numberOrLocalLabelRef  <|> symbolToken <|> unknown))
   eof
   return a
 
@@ -162,8 +169,8 @@ identifier = lift2 (:) idChar0 (many idChar) >>= (return . Identifier)
     idChar0 = letterChar  <|> oneOf' "_."
     idChar = idChar0 <|> digitChar
 
-number :: Parser AsmToken
-number = try hexadecimalNumber <|> try binaryNumber <|> decimalNumber
+numberOrLocalLabelRef :: Parser AsmToken
+numberOrLocalLabelRef = try hexadecimalNumber <|> try binaryNumber <|> decimalNumberOrLabelRef
   where
     hexadecimalNumber = 
       char '0' >> oneOf' "Xx" >> some hexDigitChar >>= return . (digitsToNumber 16)
@@ -171,9 +178,19 @@ number = try hexadecimalNumber <|> try binaryNumber <|> decimalNumber
     binaryNumber = do
       char '0' >> oneOf' "Bb" >> some (oneOf' "01") >>= return . (digitsToNumber 2)
 
-    decimalNumber = some digitChar >>= return . (digitsToNumber 10)
+    decimalNumberOrLabelRef = do
+        d <- some digitChar
+        suffix <- many alphaNumChar
+        case suffix of
+          "" -> return $ digitsToNumber 10 d
+          "f" -> return $ digitsToLabel Forward d
+          "b" -> return $ digitsToLabel Backward d
+          _ -> fail $ "Bad number " ++ d ++ suffix
   
-    digitsToNumber base = Number . fromIntegral . (foldl' (\sm d -> sm * base + digitToInt d) 0)
+    digitsToNumber base = buildToken Number base
+    digitsToLabel dir = buildToken (LocalLabelRef dir) 10
+
+    buildToken t base = t . fromIntegral . (foldl' (\sm d -> sm * base + digitToInt d) 0)
 
 unknown :: Parser AsmToken
 unknown = anySingle <* skipMany (noneOf' "\r\n") >>= return . Unknown
