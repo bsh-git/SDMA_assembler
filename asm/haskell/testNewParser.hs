@@ -64,6 +64,20 @@ tests = TestList
                                           (Leaf (at 1 1 1 (LocalLabelRef Forward 3)))
                                           (Leaf (at 1 4 1 (LocalLabelRef Backward 5)))
                                          )
+                     , testExpr "3 + 5 * (.xx_y-2)" (BinaryExpr (at 1 3 1 "+")
+                                                     (Leaf (at 1 1 1 (Number 3)))
+                                                     (BinaryExpr (at 1 7 1 "*")
+                                                      (Leaf (at 1 5 1 (Number 5)))
+                                                      (BinaryExpr (at 1 15 1 "-")
+                                                       (Leaf (at 1 10 1 (Identifier ".xx_y")))
+                                                       (Leaf (at 1 16 1 (Number 2)))))
+                                                    )
+                     , testExpr "  ( .xx_y-2 ) % 5 " (BinaryExpr (at 1 15 1 "%")
+                                                       (BinaryExpr (at 1 10 1 "-")
+                                                        (Leaf (at 1 5 1 (Identifier ".xx_y")))
+                                                         (Leaf (at 1 11 1 (Number 2))))
+                                                       (Leaf (at 1 17 1 (Number 5)))
+                                                     )
                      ]
         ]
 

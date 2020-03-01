@@ -58,6 +58,7 @@ operatorTable =
       ]
     , [ binary '*'
       , binary '/'
+      , binary '%'
       ]
     , [ binary '+'
       , binary '-'
@@ -89,7 +90,10 @@ expr :: Parser AsmExpr
 expr = makeExprParser term operatorTable
 
 term :: Parser AsmExpr
-term = tokenToExpr identifier <|> tokenToExpr numberOrLocalLabelRef
+term = tokenToExpr identifier <|> tokenToExpr numberOrLocalLabelRef <|> parens expr
+
+parens :: Parser AsmExpr -> Parser AsmExpr
+parens = between (char '(' >> sc) (char ')' >> sc)
 
 tokenToExpr p = do
   a <- lexeme p
