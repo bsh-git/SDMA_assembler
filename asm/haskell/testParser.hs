@@ -1,103 +1,138 @@
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TypeFamilies #-}
+
 --
 --
 module Sdma.UnitTest where
 
 import Test.HUnit hiding (Label)
-import System.Environment
-import Sdma
-import Sdma.Read
-import Data.Either.Combinators (fromRight')
+--import System.Environment
+import Sdma.Parser
+import Text.Megaparsec hiding (Label)
+import Data.Text
 
+at :: Int -> Int -> Int -> a -> WithPos a
+at line col len tok = WithPos (SourcePos "" (mkPos line) (mkPos col)) tok
 
---parseExpr str = parse asmExpression "(file)" str
-parseLine lns = do
-    result <- parseLines "(file)" lns
-    return $ head result
-parseExpr str = do
-    result <- parseLines "(file)" ("OP " ++ str)
-    case head result of
-      (_,Just (SdmaInstruction "OP" expr Empty),_) -> return expr
-      _ -> error $ "parser failed for expression " ++ str
+eol :: Int -> Int -> Int -> WithPos AsmToken
+eol line col _ = WithPos (SourcePos "" (mkPos line) (mkPos col)) Eol
 
-testExpr str expect = TestCase $ Right expect @=? (parseExpr str)
-testLine str labels expect = TestCase $ Right (labels, expect, 1) @=? parseLine str
+testExpr str expect = TestCase $ Right expect @=? (parseOperand "" str)
 
+--[AsmLine labels Nothing]
+testEmptyLine :: Text -> [WithPos Label] -> Test
+testEmptyLine str labels = TestCase $ Right [AsmLine labels Nothing] @=? (parseSdmaAsm "" str)
+testLine :: Text -> [WithPos Label] -> WithPos String -> [AsmExpr] -> Test
+testLine str labels insn oprs = TestCase $ Right [(AsmLine labels (Just $ Statement insn oprs))] @=? (parseSdmaAsm "" str)
 
 tests :: Test
 tests = TestList
-        [ TestLabel "Test for parsing a term" $
-            TestList [ testExpr "xyz" (Symbol "xyz")
-                     , testExpr "123" (Number 123)
-                     , testExpr "0xabcd" (Number 0xabcd)
-                     -- not octal
-                     , testExpr "010" (Number 10)
-                     , testExpr "-5" (UnaryOp "-" (Number (5)))
-                     , TestCase $ (Register 3) @?= symbolToRegister (fromRight' (parseExpr "r3"))
-                     ]
-        , TestLabel "test for (reg, disp)" $
-            TestList [ testExpr "(r5, 32)" (Indexed 5 (Number 32))
-                        ]
-        , TestLabel "test for binary op" $
-            TestList [ testExpr "1+2" (BinaryOp "+" (Number 1) (Number 2))
-                     , testExpr "1 + 2" (BinaryOp "+" (Number 1) (Number 2))
-                     , testExpr "1 + -2" (BinaryOp "+" (Number 1) (UnaryOp "-" (Number 2)))
-                     , testExpr "1 --20" (BinaryOp "-" (Number 1) (UnaryOp "-" (Number 20)))
-                     , testExpr "1+2*3" (BinaryOp "+" (Number 1) (BinaryOp "*" (Number 2) (Number 3)))
-                     ]
-        , TestLabel "test for expression with ()" $
-            TestList [ testExpr "(3*5)" (BinaryOp "*" (Number 3) (Number 5))
-                     , testExpr "( 3 * 5 )" (BinaryOp "*" (Number 3) (Number 5))
-                     , testExpr "3 * (a + 5)" (BinaryOp "*" (Number 3) (BinaryOp "+" (Symbol "a") (Number 5)))
-                     , testExpr "3 * a + 5" (BinaryOp "+" (BinaryOp "*" (Number 3) (Symbol "a")) (Number 5))
+        [ TestLabel "test for tokens" $
+            TestList
+            [
+              TestCase $ tokenize "" "+" @?= [at 1 1 1 (Symbol "+")]
+            , TestCase $ tokenize "" "   -   " @?= [at 1 4 1 (Symbol "-")]
+            , TestCase $ tokenize "" "  \n\r\n  \n" @?= [ WithPos (SourcePos "" (mkPos 1) (mkPos 3)) Eol
+                                                        , WithPos (SourcePos "" (mkPos 3) (mkPos 3)) Eol
+                                                    ]
+            , TestCase $ tokenize "" "  abc ; ._xyz01" @?= [ at 1 3 3 (Identifier "abc")
+                                                           , at 1 7 1 (Symbol ";")
+                                                           , at 1 9 7 (Identifier "._xyz01")
+                                                       ]
+            , TestCase $ tokenize ""  "   0xabcd" @?= [at 1 4 6 (Number 0xabcd)]
+            , TestCase $ tokenize ""  "123*0b01011111" @?= [ at 1 1 3 (Number 123)
+                                                           , at 1 4 1 (Symbol "*")
+                                                           , at 1 5 10 (Number 0x5f)]
+            -- comment
+            , TestCase $ tokenize ""  "123  # abc  \ndef" @?= [ at 1 1 3 (Number 123)
+                                                              , eol 1 13 1
+                                                              , at 2 1 3 (Identifier "def")
+                                                              ]
+            , TestCase $ tokenize "" "123@xxx\n42" @?= [ at 1 1 3 (Number 123)
+                                                       , at 1 4 4 (Unknown '@')
+                                                       , eol 1 8 1
+                                                       , at 2 1 2 (Number 42)
+                                                       ]
+            ]
+        , TestLabel "test for expressions" $
+            TestList [ testExpr "xyz" (Leaf (at 1 1 3 (Identifier "xyz")))
+                     , testExpr " 123" (Leaf (at 1 2 3 (Number 123)))
+                     , testExpr "0xabcd" (Leaf (at 1 1 6 (Number 0xabcd)))
+                     , testExpr "+3" (UnaryExpr (at 1 1 1 "+") (Leaf (at 1 2 1 (Number 3))))
+                     , testExpr " + abc" (UnaryExpr (at 1 2 1 "+") (Leaf (at 1 4 1 (Identifier "abc"))))
+                     , testExpr "1+3" (BinaryExpr (at 1 2 1 "+")
+                                       (Leaf (at 1 1 1 (Number 1)))
+                                       (Leaf (at 1 3 1 (Number 3)))
+                                      )
+                     , testExpr "5*-abc" (BinaryExpr (at 1 2 1 "*")
+                                          (Leaf (at 1 1 1 (Number 5)))
+                                          (UnaryExpr (at 1 3 1 "-") (Leaf (at 1 4 1 (Identifier "abc"))))
+                                         )
+                     , testExpr "3f-5b" (BinaryExpr (at 1 3 1 "-")
+                                          (Leaf (at 1 1 1 (LocalLabelRef Forward 3)))
+                                          (Leaf (at 1 4 1 (LocalLabelRef Backward 5)))
+                                         )
+                     , testExpr "3 + 5 * (.xx_y-2)" (BinaryExpr (at 1 3 1 "+")
+                                                     (Leaf (at 1 1 1 (Number 3)))
+                                                     (BinaryExpr (at 1 7 1 "*")
+                                                      (Leaf (at 1 5 1 (Number 5)))
+                                                      (BinaryExpr (at 1 15 1 "-")
+                                                       (Leaf (at 1 10 1 (Identifier ".xx_y")))
+                                                       (Leaf (at 1 16 1 (Number 2)))))
+                                                    )
+                     , testExpr "  ( .xx_y-2 ) % 5 " (BinaryExpr (at 1 15 1 "%")
+                                                       (BinaryExpr (at 1 10 1 "-")
+                                                        (Leaf (at 1 5 1 (Identifier ".xx_y")))
+                                                         (Leaf (at 1 11 1 (Number 2))))
+                                                       (Leaf (at 1 17 1 (Number 5)))
+                                                     )
                      ]
         , TestLabel "test for statement" $
-            TestList [ testLine "ret" [] (Just $ SdmaInstruction "ret" Empty Empty)
-                     , testLine "addi r4, 10" [] (Just $ SdmaInstruction "addi" (Symbol "r4") (Number 10))
-                     , testLine "rorb r5" [] (Just $ SdmaInstruction "rorb" (Symbol "r5") Empty)
-                     , testLine "ld  r0,(r1,4)" [] (Just $ SdmaInstruction "ld" (Symbol "r0")
-                                                                                (Indexed 1 (Number 4)))
-                     , testLine "label:bclri r0, 1" [Label "label"]
-                                (Just $ SdmaInstruction "bclri" (Symbol "r0") (Number 1))
-                     , testLine "label: \tbclri r0, 1" [Label "label"]
-                                (Just $ SdmaInstruction "bclri" (Symbol "r0") (Number 1))
-                     -- two labels at a line
-                     , testLine "label1:label2: bclri r0, 1" [Label "label1", Label "label2"]
-                                (Just $ SdmaInstruction "bclri" (Symbol "r0") (Number 1))
-                     , testLine "  1: 2: bclri r0, 1" [LocalLabel 1, LocalLabel 2]
-                                (Just $ SdmaInstruction "bclri" (Symbol "r0") (Number 1))
-                     -- only a label
-                     , testLine "  label: # bclri r0, 1" [Label "label"] Nothing
-                     , testLine "op abc # comment" [] (Just $ SdmaInstruction "op" (Symbol "abc") Empty)
-                     -- local label
-                     , testLine "1: jsr 3f" [LocalLabel 1] (Just $ SdmaInstruction "jsr" (LabelRef 3 Forward) Empty)
-                     ]
-        , TestLabel "test multiple lines" $
-            TestList [ TestCase $ parseLines "(file)" "label: ldr r0, (r3, 0)\njsr subroutine\n"
-                                  @?= Right [([Label "label"], Just $ SdmaInstruction "ldr" (Symbol "r0") (Indexed 3 (Number 0)),1),
-                                             ([],Just $ SdmaInstruction "jsr" (Symbol "subroutine") Empty,2)]
-                     , TestCase $ parseLines "(file)" "\nL: ret\n\nclr\n\nB:"
-                                  @?= Right [([Label "L"],Just $ SdmaInstruction "ret" Empty Empty, 2),
-                                             ([], Just $ SdmaInstruction "clr" Empty Empty, 4),
-                                             ([Label "B"], Nothing, 6)]
-                     , TestCase $ parseLines "(file)" "ldi r0, 0\n\nloop exit, 0\nstart: cli"
-                                  @?= Right [([], Just $ SdmaInstruction "ldi" (Symbol "r0") (Number 0), 1),
-                                             ([], Just $ SdmaInstruction "loop" (Symbol "exit") (Number 0), 3),
-                                             ([Label "start"], Just $ SdmaInstruction "cli" Empty Empty, 4)]
-                     ]
-          ]
+            TestList [ testEmptyLine "" []
+                     , testEmptyLine " label1: label2:label3:   # comment"
+                                     [(at 1 2 7 (Label "label1")),
+                                      (at 1 10 7 (Label "label2")),
+                                      (at 1 17 7 (Label "label3"))]
+                     , testEmptyLine "10: 11:123:   # comment"
+                                     [(at 1 1 3 (LocalLabel 10)),
+                                      (at 1 5 3 (LocalLabel 11)),
+                                      (at 1 8 4 (LocalLabel 123))]
 
+                     , testLine "ret" [] (at 1 1 3 "ret") []
+                     , testLine "rorb r5" [] (at 1 1 4 "rorb")
+                                [Register (at 1 6 2  5)]
+                     , testLine "addi r4, 10" [] (at 1 1 4 "addi")
+                                [ Register (at 1 6 2 4)
+                                , Leaf (at 1 10 2 (Number 10))
+                                ]
 
+                     , testLine "ld   r1, (r2, -4)" [] (at 1 1 2 "ld")
+                                [ Register (at 1 6 2 1)
+                                , Indexed (Register (at 1 11 2 2))
+                                          (UnaryExpr (at 1 15 1 "-")
+                                           (Leaf (at 1 16 1 (Number 4))))
+                                ]
+                     , testLine "addi r7, foo + 3*(bar-5)" [] (at 1 1 4 "addi")
+                                [ Register (at 1 6 2 7)
+                                , BinaryExpr (at 1 14 1 "+")
+                                  (Leaf (at 1 10 3 (Identifier "foo")))
+                                  (BinaryExpr (at 1 17 1 "*")
+                                   (Leaf (at 1 16 1 (Number 3)))
+                                   (BinaryExpr (at 1 22 1 "-")
+                                    (Leaf (at 1 19 3 (Identifier "bar")))
+                                    (Leaf (at 1 23 1 (Number 5))))
+                                  )
+                                ]
+
+                     , testLine "label: ret" [(at 1 1 6 (Label "label"))]
+                                             (at 1 8 3 "ret") []
+                     ]
+        ]
 
 main :: IO ()
-main =
-    runTestTT tests >>  getArgs >>= mapM_ parseFile
-
-  where
-    parseFile file = do
-      putStrLn $ "parse " ++ file
-      lns <- readFile file
-      either (putStr . show) showResults $ parseLines file lns
-    showResults  = mapM_ (putStrLn . show)
+main = do
+    _ <- runTestTT tests
+    return ()
 
 
 --
