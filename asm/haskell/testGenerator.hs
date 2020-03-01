@@ -9,6 +9,7 @@ import Sdma.Parser
 import Sdma.Codegen
 import Data.Either.Combinators (fromRight')
 import Data.Text
+import Data.Word
 import qualified Data.Text.IO as Txtio
 
 import Debug.Trace
@@ -26,8 +27,16 @@ testPass1 str expect = TestCase $ pass1 $ parseSdmaAsm "(file)" str
   where pass1 = either parserFail check
         check insn = expect @=? fixLabels 0 insn
 
+testGen :: Text -> [Word16] -> Test
+testGen str expect = TestCase $ do
+    case parseSdmaAsm "(file)" str of
+      Left e -> assertFailure (show e)
+      Right p -> do let ld = fixLabels 0 p
+                    generate 0 ld p @?= Right expect
+
 parserFail = assertString . ("parse error: " ++) . show
 --codegenFail = assertString . ("assemble error: " ++) . show
+
 
 
 tests :: Test
@@ -64,11 +73,11 @@ tests = TestList
                      , testInstruction "ldf r2, 13"     0x620d
                      , testInstruction "ldi r3, 0xa5"   0x0ba5
                      , testInstruction "ldrpc r4"       0x040a
-                     , testInstruction "loop 4,r3"      0x7b04
-                     , testInstruction "lsl1 r5"        0x0417
-                     , testInstruction "lsr1 r5"        0x0415
+                     , testInstruction "loop 10,3"      0x7b0a
+                     , testInstruction "lsl1 r5"        0x0517
+                     , testInstruction "lsr1 r5"        0x0515
                      , testInstruction "mov  r6, r7"    0x068f
-                     , testInstruction "nitify 3"       0x0301
+                     , testInstruction "notify 3"       0x0301
                      , testInstruction "or r0, r7"      0x00af
                      , testInstruction "ori r1, 0x55"   0x2955
                      , testInstruction "ret"            0x0006
@@ -106,11 +115,17 @@ tests = TestList
                                  ]
                      ]
         , TestLabel "relative jump" $
-            TestList [ TestCase $ do
-                           let p = fromRight' $  parseSdmaAsm"(file)" "label1: add r0, r0\nlabel2: bf label2\nlabel3: bf label1"
-                           generate 0 [] p @?= Right [0x0098, 0x7cff, 0x7cfe]
+            TestList [ testGen "label1: add r0, r0\nlabel2: bf label2\nlabel3: bf label1"
+                                [0x0098, 0x7cff, 0x7cfd]
+                     , testGen "loop exit, 0\nadd r0, r0\nadd r0, r0\nexit: "
+                                [0x7802, 0x0098, 0x0098]
+                     ]
+        , TestLabel "directives" $
+            TestList [ testInstruction ".dc 0xabcd" 0xabcd
+                     , testInstruction ".dc.w 0xabcd" 0xabcd
                      ]
         ]
+
 
 main :: IO ()
 main =

@@ -24,7 +24,7 @@ import Data.Either
 import Data.Text (append, unpack)
 import Data.Word
 import Control.Monad.HT (lift2)
-import Text.Megaparsec hiding (Label, label)
+import Text.Megaparsec hiding (Label, label, match)
 --import Text.Megaparsec.Error
 import Text.Megaparsec.Char -- hiding (symbolChar)
 --import Text.Megaparsec.Pos
@@ -87,7 +87,7 @@ statement = do
 --  123:    (local label)
 --
 data Label = Label String
-           | LocalLabel Int
+           | LocalLabel Word
     deriving (Eq, Show)
 
 
