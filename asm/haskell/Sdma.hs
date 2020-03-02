@@ -11,6 +11,7 @@ import System.Environment
 import System.IO
 import System.Exit
 import Text.Printf
+import Text.Megaparsec.Error
 import Sdma.Parser
 import Sdma.Codegen
 
@@ -33,7 +34,7 @@ processFile filename contents = do
   where
       parseError e = do
           hPutStrLn stderr ("Syntax error on " ++ filename)
-          hPutStrLn stderr (show e)
+          hPutStrLn stderr (errorBundlePretty e)
           die "abort."
 
       gen insns =
