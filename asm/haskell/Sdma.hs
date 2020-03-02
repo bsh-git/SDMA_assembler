@@ -5,11 +5,10 @@ module Sdma where
 import Data.Word
 import Data.Text (Text)
 import qualified Data.Text.IO as Txtio
---import Data.Either
 import Data.List
 import System.Environment
 import System.IO
-import System.Exit
+import qualified System.Exit
 import Text.Printf
 import Text.Megaparsec.Error
 import Sdma.Parser
@@ -25,6 +24,11 @@ main = do
       1 -> Txtio.readFile (head args) >>= processFile (head args)
       _ -> die "too many argments"
 
+
+die :: String -> IO ()
+die msg = do
+    progname <- getProgName
+    System.Exit.die (progname ++ ": " ++ msg)
 
 
 processFile :: FilePath -> Text -> IO ()
