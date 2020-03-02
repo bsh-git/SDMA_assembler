@@ -50,7 +50,9 @@ calcExpr labelDef pos expr =
     case expr of
       Leaf (WithPos _ (Number n)) -> Right (Num (fromIntegral n))
       Leaf (WithPos _ (Identifier s)) ->
-          Address `fmap` findLabel labelDef s
+          if s == "."
+          then Right (Address pos)  -- `.' for current address
+          else Address `fmap` findLabel labelDef s
           
       Leaf (WithPos _ (LocalLabelRef dir n)) -> 
           Address `fmap` findLocalLabel labelDef n dir pos

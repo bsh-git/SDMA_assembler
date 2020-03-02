@@ -113,6 +113,8 @@ tests = TestList
                                  , (0, [ at 2 1 0 (Label "label2")
                                        , at 1 1 0 (Label "label1")])
                                  ]
+                     , testGen "1:.dc 1b-.\n2:.dc 2b-1b\n3:.dc 1f-.\n1:bdf 2b"
+                               [0x0000, 0x0001, 0x0001, 0x7ffd]
                      ]
         , TestLabel "relative jump" $
             TestList [ testGen "label1: add r0, r0\nlabel2: bf label2\nlabel3: bf label1"
