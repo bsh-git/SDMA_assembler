@@ -32,6 +32,8 @@ import qualified Text.Megaparsec.Char.Lexer as L
 import Control.Monad.Combinators.Expr
 import Text.Megaparsec.Debug
 
+import Debug.Trace
+
 data WithPos a = WithPos
   { startPos :: SourcePos
   --, endPos :: SourcePos
@@ -71,8 +73,27 @@ asmLine :: Parser AsmLine
 asmLine = do
     sc
     lbls <- (many (try label))
-    insn <- option Nothing (try statement)
+    insn <- option Nothing afterLabel
     return $ AsmLine lbls insn
+
+afterLabel :: Parser (Maybe Statement)
+afterLabel = do
+    notFollowedBy eol
+
+    insn <- statementR
+    return $ case insn of
+      Right i -> Just i
+      Left err -> traceShow err Nothing
+
+statementR :: Parser (Either (ParseError Text Void) Statement)
+statementR = withRecovery recover statementR'
+    where
+      recover e = Left e <$ skipMany (noneOf' "\r\n")
+      statementR' = do
+          insn <- withPos identifierChars
+          sc
+          opr <- operand `sepBy` (char ',' >> sc)
+          return $ Right $ Statement insn opr
 
 statement :: Parser (Maybe Statement)
 statement = do
