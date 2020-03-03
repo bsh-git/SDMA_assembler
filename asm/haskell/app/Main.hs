@@ -1,6 +1,6 @@
 --
 --
-module Sdma where
+module Main where
 
 import Data.Word
 import Data.Text (Text)
