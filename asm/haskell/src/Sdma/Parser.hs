@@ -96,29 +96,31 @@ statement = do
 --
 data Label = Label String
            | LocalLabel Word
+           | BadLabel String
     deriving (Eq, Show)
 
 
-label :: Parser (WithPos Label)
-label = withPos label'
-  where
-    label' = do
-        off <- getOffset
-        l <- unpack `fmap` label''
-        if all isDigit l
-        then return $ buildNumericToken LocalLabel 10 l
-        else if labelChar0 (head l) && all labelChar1 (tail l)
-             then return $ Label l
-             else reg off >> return (Label l)
 
-    label'' =  takeWhile1P Nothing (not . notLabelChar) <* (sc >> char ':' >> sc)
+label :: Parser (WithPos Label)
+label = withPos (try goodLabel <|> badLabel)
+
+goodLabel :: Parser Label
+goodLabel = (lbl identifierChars Label
+             <|> lbl (many digitChar) (buildNumericToken LocalLabel 10))
+  where
+    lbl :: Parser String -> (String -> Label) -> (Parser Label)
+    lbl p f = f `fmap` (p <* (sc >> single ':' >> sc))
+
+badLabel :: Parser Label
+badLabel = do
+    off <- getOffset
+    l <- unpack `fmap` takeWhileP Nothing (not . notLabelChar) <* (sc >> single ':' >> sc)
+    let e = ErrorFail "Bad label"
+    registerParseError (FancyError off (Data.Set.singleton e))
+    return $ BadLabel l
+  where
     -- eat wider range of chars to detect bad labels
     notLabelChar c = isSpace c || c `elem` (":#;/" :: [Char])
-    labelChar0 c = isAlpha c || c `elem` ("._" :: [Char])
-    labelChar1 c = labelChar0 c || isDigit c
-    reg off = let e = ErrorFail "Bad label"
-              in
-                registerParseError (FancyError off (Data.Set.singleton e))
 
 --
 -- Expression
