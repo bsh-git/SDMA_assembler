@@ -78,7 +78,7 @@ asmLine = do
 
 afterLabel :: Parser (Maybe Statement)
 afterLabel = do
-    notFollowedBy eol
+    notFollowedBy (void eol <|> eof)
 
     insn <- statementR
     return $ case insn of
@@ -88,7 +88,7 @@ afterLabel = do
 statementR :: Parser (Either (ParseError Text Void) Statement)
 statementR = withRecovery recover statementR'
     where
-      recover e = Left e <$ skipMany (noneOf' "\r\n")
+      recover e = Left e <$ (registerParseError e >> skipMany (noneOf' "\r\n"))
       statementR' = do
           insn <- withPos identifierChars
           sc
