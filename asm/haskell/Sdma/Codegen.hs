@@ -228,7 +228,7 @@ generateOne ld pos statement@(Statement (WithPos _ nmemonic) _) = generateOne' s
     missing = badNumberOfOperands "missing an operand"
     toomany = badNumberOfOperands "too many operands"
     badNumberOfOperands s n (WithPos _ nm) =
-        fail $ s ++ "for " ++ nm ++ ". requires " ++ (show n) ++ " operands."
+        Left $ s ++ "for " ++ nm ++ ". requires " ++ (show n) ++ " operands."
 
     cantHappen = error "Can't happen"
 
