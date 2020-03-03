@@ -73,34 +73,20 @@ asmLine :: Parser AsmLine
 asmLine = do
     sc
     lbls <- (many (try label))
-    insn <- option Nothing afterLabel
+    insn <- option Nothing statement
     return $ AsmLine lbls insn
-
-afterLabel :: Parser (Maybe Statement)
-afterLabel = do
-    notFollowedBy (void eol <|> eof)
-
-    insn <- statementR
-    return $ case insn of
-      Right i -> Just i
-      Left err -> traceShow err Nothing
-
-statementR :: Parser (Either (ParseError Text Void) Statement)
-statementR = withRecovery recover statementR'
-    where
-      recover e = Left e <$ (registerParseError e >> skipMany (noneOf' "\r\n"))
-      statementR' = do
-          insn <- withPos identifierChars
-          sc
-          opr <- operand `sepBy` (char ',' >> sc)
-          return $ Right $ Statement insn opr
 
 statement :: Parser (Maybe Statement)
 statement = do
-    insn <- withPos identifierChars
-    sc
-    opr <- operand `sepBy` (char ',' >> sc)
-    return $ Just $ Statement insn opr
+    notFollowedBy (void eol <|> eof)
+    withRecovery recover statement'
+  where
+    recover e = Nothing <$ (registerParseError e >> skipMany (noneOf' "\r\n"))
+    statement' = do
+      insn <- withPos (identifierChars <?> "a nmemonic or a directive")
+      sc
+      opr <- operand `sepBy` (char ',' >> sc)
+      return $ Just $ Statement insn opr
 
 --
 --  Label
