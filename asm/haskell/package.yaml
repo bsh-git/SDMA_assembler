@@ -23,6 +23,7 @@ dependencies:
 - text
 - megaparsec >= 8.0
 - utility-ht
+- containers
 - parser-combinators
 
 library:

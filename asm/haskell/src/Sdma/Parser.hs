@@ -15,15 +15,16 @@ module Sdma.Parser ( AsmExpr(..)
                    , module Text.Megaparsec
                    ) where
 
-import Data.Text (Text)
+import Data.Text (Text, pack, unpack)
+import qualified Data.Text  as T (foldl', all, head, tail)
 import Data.Void
 import Data.Char
 import Data.List (foldl')
 import Data.Functor (void)
 import Data.Either
-import Data.Text (append, unpack)
 import Data.Word
-import Control.Monad.HT (lift2)
+import qualified Data.Set
+import Control.Monad.HT (lift2, lift)
 import Text.Megaparsec hiding (Label, label, match)
 --import Text.Megaparsec.Error
 import Text.Megaparsec.Char -- hiding (symbolChar)
@@ -99,13 +100,25 @@ data Label = Label String
 
 
 label :: Parser (WithPos Label)
-label = withPos (label' identifierChars Label
-                    <|> label' (many digitChar) (buildToken LocalLabel 10))
+label = withPos label'
   where
-    label' :: Parser String -> (String -> Label) -> (Parser Label)
-    label' p f = f `fmap` (p <* (sc >> char ':' >> sc))
+    label' = do
+        off <- getOffset
+        l <- unpack `fmap` label''
+        if all isDigit l
+        then return $ buildNumericToken LocalLabel 10 l
+        else if labelChar0 (head l) && all labelChar1 (tail l)
+             then return $ Label l
+             else reg off >> return (Label l)
 
-
+    label'' =  takeWhile1P Nothing (not . notLabelChar) <* (sc >> char ':' >> sc)
+    -- eat wider range of chars to detect bad labels
+    notLabelChar c = isSpace c || c `elem` (":#;/" :: [Char])
+    labelChar0 c = isAlpha c || c `elem` ("._" :: [Char])
+    labelChar1 c = labelChar0 c || isDigit c
+    reg off = let e = ErrorFail "Bad label"
+              in
+                registerParseError (FancyError off (Data.Set.singleton e))
 
 --
 -- Expression
@@ -288,10 +301,10 @@ numberOrLocalLabelRef = try hexadecimalNumber <|> try binaryNumber <|> decimalNu
           "b" -> return $ digitsToLabel Backward d
           _ -> fail $ "Bad number " ++ d ++ suffix
   
-    digitsToNumber base = buildToken Number base
-    digitsToLabel dir = buildToken (LocalLabelRef dir) 10
+    digitsToNumber base = buildNumericToken Number base
+    digitsToLabel dir = buildNumericToken (LocalLabelRef dir) 10
 
-buildToken t base = t . fromIntegral . (foldl' (\sm d -> sm * base + digitToInt d) 0)
+buildNumericToken t base = t . fromIntegral . (foldl' (\sm d -> sm * base + digitToInt d) 0)
 
 unknown :: Parser AsmToken
 unknown = anySingle <* skipMany (noneOf' "\r\n") >>= return . Unknown
