@@ -9,6 +9,9 @@ module Sdma.Parser ( AsmExpr(..)
                    , LabelRefDirection(..)
                    , AsmLine(..)
                    , Statement(..)
+                   , Parser
+                   , asmFile
+                   , findOffset
                    , parseSdmaAsm
                    , tokenize
                    , parseOperand
@@ -39,6 +42,7 @@ data WithPos a = WithPos
   { startPos :: SourcePos
   --, endPos :: SourcePos
   --, tokenLength :: Int
+  , startOff :: Int
   , tokenVal :: a
   } deriving (Eq, Ord, Show)
 
@@ -46,11 +50,11 @@ data WithPos a = WithPos
 type Parser = Parsec Void Text
 
 parseSdmaAsm :: FilePath -> Text -> Either (ParseErrorBundle Text Void) [AsmLine]
-parseSdmaAsm fn input = parse (asmFile <* eof) fn input
+parseSdmaAsm fn input = parse asmFile fn input
 
 
 asmFile :: Parser [AsmLine]
-asmFile = asmLine `sepBy` (void eol <|> void semiColon)
+asmFile = (asmLine `sepBy` (void eol <|> void semiColon) <* eof)
   where
     semiColon = some (char ';')
 
@@ -63,7 +67,7 @@ data AsmLine = AsmLine
     { alLabels :: [WithPos Label]
     , alStatement :: Maybe Statement
     } deriving (Eq, Show)
-    
+
 
 data Statement = Statement
     { stNmemonic :: (WithPos String)
@@ -135,6 +139,16 @@ data AsmExpr
   deriving (Eq, Show)
 
 
+findOffset :: AsmExpr -> Int
+findOffset expr =
+  case expr of
+    Leaf (WithPos _ o _) -> o
+    UnaryExpr (WithPos _ o _) _ -> o
+    BinaryExpr (WithPos _ o _) _ _ -> o
+    Indexed l _ -> findOffset l
+    Register (WithPos _ o _) -> o
+
+
 parseOperand :: FilePath -> Text -> Either (ParseErrorBundle Text Void) AsmExpr
 parseOperand fn input = parse (blanks >> operand <* eof) fn input
 
@@ -156,20 +170,20 @@ operatorTable =
 prefix :: Char -> Operator Parser AsmExpr
 prefix c = Prefix (unary (char c)) -- (apply unary (char c))
   where
-    unary op = do
-        pos <- getSourcePos
-        _ <- op
-        sc
-        return $ UnaryExpr (WithPos pos [c])
+    unary op = withPosExpr UnaryExpr c op
 
 binary :: Char -> Operator Parser AsmExpr
 binary  c = InfixL (binaryExpr (char c))
   where
-    binaryExpr op = do
-        pos <- getSourcePos
-        _ <- op
-        sc
-        return $ BinaryExpr (WithPos pos [c])
+    binaryExpr op = withPosExpr BinaryExpr c op
+
+withPosExpr expr c op = do
+  off <- getOffset
+  pos <- getSourcePos
+  _ <- op
+  sc
+  return $ expr (WithPos pos off [c])
+
 expr :: Parser AsmExpr
 expr = makeExprParser term operatorTable
 
@@ -197,18 +211,15 @@ operand = try (parens indexedAddressing) <|> try register <|> expr
 register :: Parser AsmExpr
 register = lexeme identifier >>= register'
   where
-    register' (WithPos pos (Identifier regname)) =
+    register' (WithPos pos off (Identifier regname)) =
         if length regname /= 2 || toLower (head regname) /= 'r'
         then fail "not register"
         else let regnum = digitToInt (head (tail regname))
              in
                if regnum <= 7
-               then return $ Register (WithPos pos (fromIntegral regnum))
+               then return $ Register (WithPos pos off (fromIntegral regnum))
                else fail "invalid register number"
     register' _ = fail "not register"
-                
-
-    
 
 --
 -- Token
@@ -248,9 +259,9 @@ sc = L.space blank1 (L.skipLineComment "#") (L.skipBlockComment "/*" "*/")
 withPos :: Parser a -> Parser (WithPos a)
 withPos p = do
   pos <- getSourcePos
+  off <- getOffset
   a <- p
-  return $ WithPos pos a
-
+  return $ WithPos pos off a
 
 lexer :: Parser [WithPos AsmToken]
 lexer = do
@@ -261,10 +272,11 @@ lexer = do
 
 lexeme :: Parser a -> Parser (WithPos a)
 lexeme p = do
+    offBefore <- getOffset
     posBefore <- getSourcePos
     a <- p
     sc
-    return $ WithPos posBefore a
+    return $ WithPos posBefore offBefore a
 
 --symbol :: Text -> Parser Text
 --symbol s = dbg "symbol" $ L.symbol empty s
@@ -288,7 +300,7 @@ identifierChars = lift2 (:) idChar0 (many idChar)
 numberOrLocalLabelRef :: Parser AsmToken
 numberOrLocalLabelRef = try hexadecimalNumber <|> try binaryNumber <|> decimalNumberOrLabelRef
   where
-    hexadecimalNumber = 
+    hexadecimalNumber =
       char '0' >> oneOf' "Xx" >> some hexDigitChar >>= return . (digitsToNumber 16)
 
     binaryNumber = do
@@ -302,10 +314,11 @@ numberOrLocalLabelRef = try hexadecimalNumber <|> try binaryNumber <|> decimalNu
           "f" -> return $ digitsToLabel Forward d
           "b" -> return $ digitsToLabel Backward d
           _ -> fail $ "Bad number " ++ d ++ suffix
-  
+
     digitsToNumber base = buildNumericToken Number base
     digitsToLabel dir = buildNumericToken (LocalLabelRef dir) 10
 
+buildNumericToken :: (Word -> a) -> Int -> String -> a
 buildNumericToken t base = t . fromIntegral . (foldl' (\sm d -> sm * base + digitToInt d) 0)
 
 unknown :: Parser AsmToken
