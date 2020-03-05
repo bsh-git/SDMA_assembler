@@ -16,7 +16,7 @@ assembleFile :: FilePath -> Text -> Word16 -> Either String [Word16]
 assembleFile filename source startAddr = do
     either reportErrors Right $ parse (asmFile >>= gen) filename source
   where
-    gen insn = generate startAddr (fixLabels startAddr insn) insn
+    gen insn = generate (WordAddr startAddr) (fixLabels (WordAddr startAddr) insn) insn
     reportErrors  = (Left . errorBundlePretty)
 
 

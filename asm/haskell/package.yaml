@@ -25,6 +25,7 @@ dependencies:
 - utility-ht
 - containers
 - parser-combinators
+- list-singleton
 
 library:
   source-dirs: src

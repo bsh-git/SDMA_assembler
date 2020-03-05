@@ -6,13 +6,15 @@ import Data.Word
 import Data.Set (singleton)
 import Text.Printf
 import Sdma.Parser
+import Sdma.Base
 
 type LabelDef = (Word16, [WithPos Label])
 
-addLabelDef :: [LabelDef] -> [WithPos Label] -> Word16 -> [LabelDef]
+addLabelDef :: [LabelDef] -> [WithPos Label] -> CodeAddr -> [LabelDef]
 addLabelDef ld [] _ = ld
-addLabelDef [] new pos = [(pos, new)]
-addLabelDef ld@((pos0, lbl):ls) new pos
+addLabelDef _ _ (ByteAddr _) = error "byte address is not allowed for label"
+addLabelDef [] new (WordAddr a) = [(a, new)]
+addLabelDef ld@((pos0, lbl):ls) new (WordAddr pos)
     | pos0 == pos = (pos, new ++ lbl):ls   -- multiple labels at the same position in several lines
     | otherwise = (pos, new):ld
 
@@ -27,18 +29,21 @@ findLabel ld s = case found of
 
 -- (Label s) `elem` (snd d)
 
-findLocalLabel :: [LabelDef] -> Word -> LabelRefDirection -> Word16 -> Maybe Word16
-findLocalLabel ld n dir pos =
-    case (null filtered, dir) of
-     (True,_) -> Nothing
-     (False,Forward) -> Just $ fst $ last filtered
-     (False,Backward) -> Just $ fst $ head filtered
+findLocalLabel :: [LabelDef] -> Word -> LabelRefDirection -> CodeAddr -> Maybe Word16
+findLocalLabel id n dir (ByteAddr a) = error "byte address is not allowed"
+findLocalLabel ld n dir (WordAddr a) = findLocalLabel' ld n dir a
   where
-    match d = (LocalLabel n) `elem` map tokenVal (snd d)
-    dirOk = if dir == Forward then forward else backward
-    forward d = (fst d) > pos
-    backward d = (fst d) <= pos
-    filtered = filter (\d -> (match d && dirOk d)) ld
+    findLocalLabel' ld n dir pos =
+        case (null filtered, dir) of
+          (True,_) -> Nothing
+          (False,Forward) -> Just $ fst $ last filtered
+          (False,Backward) -> Just $ fst $ head filtered
+      where
+        match d = (LocalLabel n) `elem` map tokenVal (snd d)
+        dirOk = if dir == Forward then forward else backward
+        forward d = (fst d) > pos
+        backward d = (fst d) <= pos
+        filtered = filter (\d -> (match d && dirOk d)) ld
 
 
 --
@@ -47,8 +52,10 @@ findLocalLabel ld n dir pos =
 data Value = Num Int | Address Word16
     deriving (Eq, Show)
 
-calcExpr :: [LabelDef] -> Word16 -> AsmExpr -> Parser Value
-calcExpr labelDef pos expr =
+calcExpr :: [LabelDef] -> CodeAddr -> AsmExpr -> Parser Value
+
+calcExpr labelDef a@(ByteAddr _) expr = calcExpr labelDef (toWordAddr a) expr
+calcExpr labelDef wa@(WordAddr pos) expr =
     case expr of
       Leaf (WithPos _ _ (Number n)) -> return (Num (fromIntegral n))
       Leaf (WithPos _ off (Identifier s)) ->
@@ -59,22 +66,22 @@ calcExpr labelDef pos expr =
                  Just a -> return (Address a)
 
       Leaf (WithPos _ off (LocalLabelRef dir n)) ->
-          case findLocalLabel labelDef n dir pos of
+          case findLocalLabel labelDef n dir wa of
             Nothing -> evalError off $ "label not defined"
             Just a -> return (Address a)
 
       Leaf (WithPos _ off t) -> evalError off $ "Invalid token " ++ (show t)
 
-      UnaryExpr op e -> unaryExpr labelDef pos  op e
-      BinaryExpr op left right -> binaryExpr labelDef pos op left right
+      UnaryExpr op e -> unaryExpr labelDef wa  op e
+      BinaryExpr op left right -> binaryExpr labelDef wa op left right
 
       (Indexed _ _) -> evalError (findOffset expr) $ "Invalid expression "
       (Register _) -> evalError (findOffset expr) $ "Invalid expression "
 
 
-unaryExpr :: [LabelDef] -> Word16 -> (WithPos String) -> AsmExpr -> Parser Value
-unaryExpr labelDef pos (WithPos _ opOff op) expr = do
-    expr' <- calcExpr labelDef pos expr
+unaryExpr :: [LabelDef] -> CodeAddr -> (WithPos String) -> AsmExpr -> Parser Value
+unaryExpr labelDef wa (WithPos _ opOff op) expr = do
+    expr' <- calcExpr labelDef wa expr
     case (op, expr') of
       ("+", _) -> return $ expr'
       ("-", (Num v)) -> return (Num (-v))
@@ -82,10 +89,10 @@ unaryExpr labelDef pos (WithPos _ opOff op) expr = do
         return (Num (- (fromIntegral a)))
       (_, _) -> evalError opOff $ "Unkonw unary operator " ++ op
 
-binaryExpr :: [LabelDef] -> Word16 -> (WithPos String) -> AsmExpr -> AsmExpr -> Parser Value
-binaryExpr labelDef pos (WithPos _ opOff op) left right = do
-    left' <- calcExpr labelDef pos left
-    right' <- calcExpr labelDef pos right
+binaryExpr :: [LabelDef] -> CodeAddr -> (WithPos String) -> AsmExpr -> AsmExpr -> Parser Value
+binaryExpr labelDef wa (WithPos _ opOff op) left right = do
+    left' <- calcExpr labelDef wa left
+    right' <- calcExpr labelDef wa right
     case (left', right') of
       ((Address _), (Address _)) ->
           if op /= "-"
@@ -110,7 +117,7 @@ binaryExpr labelDef pos (WithPos _ opOff op) left right = do
           (_, _, _) -> evalError opOff $ "Unsupported expression: " ++ (show (op, left, right))
 
 
-calcValue :: [LabelDef] -> Word16 -> AsmExpr -> Parser Int
+calcValue :: [LabelDef] -> CodeAddr -> AsmExpr -> Parser Int
 calcValue labelDef pos expr = do
     val <- calcExpr labelDef pos expr
     case val of

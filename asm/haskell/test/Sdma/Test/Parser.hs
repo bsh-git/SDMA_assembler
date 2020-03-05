@@ -117,6 +117,7 @@ testParser = TestList
                                                         (Leaf' (Number 2)))
                                                        (Leaf' (Number 5))
                                                       )
+                     , testExprS "0xdeadbeef" (Leaf' (Number 0xdeadbeef))
                      ]
         , TestLabel "test for statement" $
             TestList [ testEmptyLine "" []

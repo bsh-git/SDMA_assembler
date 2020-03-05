@@ -4,13 +4,12 @@
 module Sdma.Test.Generator where
 
 import Test.HUnit hiding (Label)
-import System.Environment
 import Sdma
 import Sdma.Parser
 import Sdma.Codegen
 import Data.Text
 import Data.Word
-import qualified Data.Text.IO as Txtio
+--import qualified Data.Text.IO as Txtio
 
 import Debug.Trace
 
@@ -24,11 +23,11 @@ testInstruction' label insn expect = TestCase $ Right [expect] @=?
 
 testPass1 str expect = TestCase $ pass1 $ parseSdmaAsm "(file)" str
   where pass1 = either parserFail check
-        check insn = expect @=? fixLabels 0 insn
+        check insn = expect @=? fixLabels (WordAddr 0) insn
 
-testGen :: Text -> [Word16] -> Test
+testGen :: String -> [Word16] -> Test
 testGen str expect = TestCase $
-    assembleFile "(file)" str 0 @?= Right expect
+    assembleFile "(file)" (pack str) 0 @?= Right expect
 
 parserFail = assertString . ("parse error: " ++) . show
 --codegenFail = assertString . ("assemble error: " ++) . show
@@ -121,6 +120,28 @@ testGenerator = TestList
         , TestLabel "directives" $
             TestList [ testInstruction ".dc 0xabcd" 0xabcd
                      , testInstruction ".dc.w 0xabcd" 0xabcd
+                     , testGen ".dc.b 0x12, 0x13, 0x14, 0x15" [0x1213, 0x1415] -- Big endian
+                     , testGen ".dc.b 0x12, 0x13, 0x14" [0x1213, 0x1400]
+                     , testGen "1: .dc 0x1234, 1b-." [0x1234, 0xffff]
+                     , testGen ".dc.l 42" [0, 42]
+                     , testGen ".dc.l 0xdeadbeef" [0xdead, 0xbeef]
+                     , testGen ".dc.b 1, 2, 3\n.dc.b 4, 5, 6, 7\n.dc.w 8"
+                               [0x0102, 0x0304, 0x0506, 0x0700, 0x0008]  -- auto alignment
+                     , testGen ".dc.b 1, 2, 3;.dc 4"
+                               [0x0102, 0x0300, 0x0004] -- auto alignment
+                     , testGen ".dc.b 1 ;.dc.l 0x12345678"
+                               [0x0100, 0x1234, 0x5678] -- aliigned to word baundary, not long word
+                     ]
+        , TestLabel "keep track with code address" $
+            TestList [ testGen (  "1: bt 99f\n"
+                               ++ "   .dc.b 1, 2, 3\n"
+                               ++ "   .dc.l 0xdeadbeef\n"
+                               ++ "99:")
+                               [0x7d04, 0x0102, 0x0300, 0xdead, 0xbeef]
+                     , testGen (  "1: bt 99f\n"
+                               ++ "   .dc.w 1, 2\n"
+                               ++ "99:")
+                               [0x7d02, 0x0001, 0x0002]
                      ]
         ]
 
