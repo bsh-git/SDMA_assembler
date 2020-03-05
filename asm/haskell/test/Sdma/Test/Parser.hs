@@ -3,7 +3,7 @@
 
 --
 --
-module Main where
+module Sdma.Test.Parser where
 
 import Test.HUnit hiding (Label)
 --import System.Environment
@@ -160,11 +160,6 @@ testParser = TestList
                      ]
         ]
 
-
-main :: IO ()
-main = do
-    _ <- runTestTT testParser
-    return ()
 
 --
 -- Local Variables:

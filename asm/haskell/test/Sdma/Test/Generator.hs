@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 --
 --
-module Main where
+module Sdma.Test.Generator where
 
 import Test.HUnit hiding (Label)
 import System.Environment
@@ -124,16 +124,6 @@ testGenerator = TestList
                      ]
         ]
 
-
-main :: IO ()
-main =
-    runTestTT testGenerator >>  getArgs >>= mapM_ processFile
-
-  where
-    processFile file = do
-      putStrLn $ "parse " ++ file
-      lns <- Txtio.readFile file
-      (putStr . show) $ assembleFile file lns 0
 
 --
 -- Local Variables:
