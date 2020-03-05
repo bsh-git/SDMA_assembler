@@ -1,46 +1,42 @@
 {-# LANGUAGE OverloadedStrings #-}
 --
 --
-module Sdma.TestGenerator where
+module Main where
 
 import Test.HUnit hiding (Label)
 import System.Environment
+import Sdma
 import Sdma.Parser
 import Sdma.Codegen
-import Data.Either.Combinators (fromRight')
 import Data.Text
 import Data.Word
 import qualified Data.Text.IO as Txtio
 
 import Debug.Trace
 
-at :: Int -> Int -> Int -> a -> WithPos a
-at line col _ tok = WithPos (SourcePos "(file)" (mkPos line) (mkPos col)) tok
+at :: Int -> Int -> Int -> Int -> a -> WithPos a
+at line col _ off tok = WithPos (SourcePos "(file)" (mkPos line) (mkPos col)) off tok
 
 testBranch opc expect = testInstruction' "1: " (opc ++ " 1b") expect
 testInstruction = testInstruction' ""
-testInstruction' label insn expect = TestCase $ gen $ parseSdmaAsm "(file)" $ pack (label ++ insn)
-  where gen = either parserFail check
-        check lns = assertEqual ("test " ++ insn) (Right [expect]) $ generate 0 [(0, [at 1 1 1 (LocalLabel 1)])] lns
+testInstruction' label insn expect = TestCase $ Right [expect] @=?
+  assembleFile "(file)" (pack (label ++ insn)) 0
 
 testPass1 str expect = TestCase $ pass1 $ parseSdmaAsm "(file)" str
   where pass1 = either parserFail check
         check insn = expect @=? fixLabels 0 insn
 
 testGen :: Text -> [Word16] -> Test
-testGen str expect = TestCase $ do
-    case parseSdmaAsm "(file)" str of
-      Left e -> assertFailure (show e)
-      Right p -> do let ld = fixLabels 0 p
-                    generate 0 ld p @?= Right expect
+testGen str expect = TestCase $
+    assembleFile "(file)" str 0 @?= Right expect
 
 parserFail = assertString . ("parse error: " ++) . show
 --codegenFail = assertString . ("assemble error: " ++) . show
 
 
 
-tests :: Test
-tests = TestList
+testGenerator :: Test
+testGenerator = TestList
         [ TestLabel "Instructions" $
             TestList [ testInstruction "add r1, r3"     0x019b
                      , testInstruction "addi r0, 0xdb"  0x18db
@@ -101,17 +97,17 @@ tests = TestList
 
         , TestLabel "Labels" $
             TestList [ testPass1 "add r1, r3\nlabel: addi r0, 0xdb\n1:and r2, r4"
-                                 [(2, [at 3 1 0 (LocalLabel 1)]),
-                                  (1, [at 2 1 0 (Label "label")])]
+                                 [(2, [at 3 1 0 32 (LocalLabel 1)]),
+                                  (1, [at 2 1 0 11 (Label "label")])]
                      , testPass1 "label:add r1, r3\n\nfoo: bar: addi r0, 0xdb\n"
-                                 [ (1, [ at 3 1 0 (Label "foo")
-                                       , at 3 6 0 (Label "bar")])
-                                 , (0, [at 1 1 0 (Label "label")])]
+                                 [ (1, [ at 3 1 0 18 (Label "foo")
+                                       , at 3 6 0 23 (Label "bar")])
+                                 , (0, [at 1 1 0 0 (Label "label")])]
                      , testPass1 "label1: # comment\nlabel2:\nadd r1, r3\n\nfoo: bar: addi r0, 0xdb\n"
-                                 [ (1, [ at 5 1 0 (Label "foo")
-                                       , at 5 6 0 (Label "bar")])
-                                 , (0, [ at 2 1 0 (Label "label2")
-                                       , at 1 1 0 (Label "label1")])
+                                 [ (1, [ at 5 1 0 38 (Label "foo")
+                                       , at 5 6 0 43 (Label "bar")])
+                                 , (0, [ at 2 1 0 18 (Label "label2")
+                                       , at 1 1 0 0 (Label "label1")])
                                  ]
                      , testGen "1:.dc 1b-.\n2:.dc 2b-1b\n3:.dc 1f-.\n1:bdf 2b"
                                [0x0000, 0x0001, 0x0001, 0x7ffd]
@@ -131,14 +127,13 @@ tests = TestList
 
 main :: IO ()
 main =
-    runTestTT tests >>  getArgs >>= mapM_ processFile
+    runTestTT testGenerator >>  getArgs >>= mapM_ processFile
 
   where
     processFile file = do
       putStrLn $ "parse " ++ file
       lns <- Txtio.readFile file
-      either (putStr . show) gen $ parseSdmaAsm file lns
-    gen insns = (putStr . show . (generate 0 (fixLabels 0 insns))) insns
+      (putStr . show) $ assembleFile file lns 0
 
 --
 -- Local Variables:
