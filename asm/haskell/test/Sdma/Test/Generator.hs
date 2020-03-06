@@ -11,10 +11,7 @@ import Data.Text
 import Data.Word
 --import qualified Data.Text.IO as Txtio
 
-import Debug.Trace
-
-at :: Int -> Int -> Int -> Int -> a -> WithPos a
-at line col _ off tok = WithPos (SourcePos "(file)" (mkPos line) (mkPos col)) off tok
+--import Debug.Trace
 
 testBranch opc expect = testInstruction' "1: " (opc ++ " 1b") expect
 testInstruction = testInstruction' ""
@@ -96,17 +93,17 @@ testGenerator = TestList
 
         , TestLabel "Labels" $
             TestList [ testPass1 "add r1, r3\nlabel: addi r0, 0xdb\n1:and r2, r4"
-                                 [(2, [at 3 1 0 32 (LocalLabel 1)]),
-                                  (1, [at 2 1 0 11 (Label "label")])]
+                                 [(2, [WithPos 32 (LocalLabel 1)]),
+                                  (1, [WithPos 11 (Label "label")])]
                      , testPass1 "label:add r1, r3\n\nfoo: bar: addi r0, 0xdb\n"
-                                 [ (1, [ at 3 1 0 18 (Label "foo")
-                                       , at 3 6 0 23 (Label "bar")])
-                                 , (0, [at 1 1 0 0 (Label "label")])]
+                                 [ (1, [ WithPos 18 (Label "foo")
+                                       , WithPos 23 (Label "bar")])
+                                 , (0, [WithPos 0 (Label "label")])]
                      , testPass1 "label1: # comment\nlabel2:\nadd r1, r3\n\nfoo: bar: addi r0, 0xdb\n"
-                                 [ (1, [ at 5 1 0 38 (Label "foo")
-                                       , at 5 6 0 43 (Label "bar")])
-                                 , (0, [ at 2 1 0 18 (Label "label2")
-                                       , at 1 1 0 0 (Label "label1")])
+                                 [ (1, [ WithPos 38 (Label "foo")
+                                       , WithPos 43 (Label "bar")])
+                                 , (0, [ WithPos 18 (Label "label2")
+                                       , WithPos 0 (Label "label1")])
                                  ]
                      , testGen "1:.dc 1b-.\n2:.dc 2b-1b\n3:.dc 1f-.\n1:bdf 2b"
                                [0x0000, 0x0001, 0x0001, 0x7ffd]

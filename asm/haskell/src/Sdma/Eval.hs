@@ -57,20 +57,20 @@ calcExpr :: [LabelDef] -> CodeAddr -> AsmExpr -> Parser Value
 calcExpr labelDef a@(ByteAddr _) expr = calcExpr labelDef (toWordAddr a) expr
 calcExpr labelDef wa@(WordAddr pos) expr =
     case expr of
-      Leaf (WithPos _ _ (Number n)) -> return (Num (fromIntegral n))
-      Leaf (WithPos _ off (Identifier s)) ->
+      Leaf (WithPos _ (Number n)) -> return (Num (fromIntegral n))
+      Leaf (WithPos off (Identifier s)) ->
           if s == "."
           then return (Address pos)  -- `.' for current address
           else case (findLabel labelDef s) of
                  Nothing -> evalError off $ printf "not defined %s" s
                  Just a -> return (Address a)
 
-      Leaf (WithPos _ off (LocalLabelRef dir n)) ->
+      Leaf (WithPos off (LocalLabelRef dir n)) ->
           case findLocalLabel labelDef n dir wa of
             Nothing -> evalError off $ "label not defined"
             Just a -> return (Address a)
 
-      Leaf (WithPos _ off t) -> evalError off $ "Invalid token " ++ (show t)
+      Leaf (WithPos off t) -> evalError off $ "Invalid token " ++ (show t)
 
       UnaryExpr op e -> unaryExpr labelDef wa  op e
       BinaryExpr op left right -> binaryExpr labelDef wa op left right
@@ -80,7 +80,7 @@ calcExpr labelDef wa@(WordAddr pos) expr =
 
 
 unaryExpr :: [LabelDef] -> CodeAddr -> (WithPos String) -> AsmExpr -> Parser Value
-unaryExpr labelDef wa (WithPos _ opOff op) expr = do
+unaryExpr labelDef wa (WithPos opOff op) expr = do
     expr' <- calcExpr labelDef wa expr
     case (op, expr') of
       ("+", _) -> return $ expr'
@@ -90,7 +90,7 @@ unaryExpr labelDef wa (WithPos _ opOff op) expr = do
       (_, _) -> evalError opOff $ "Unkonw unary operator " ++ op
 
 binaryExpr :: [LabelDef] -> CodeAddr -> (WithPos String) -> AsmExpr -> AsmExpr -> Parser Value
-binaryExpr labelDef wa (WithPos _ opOff op) left right = do
+binaryExpr labelDef wa (WithPos opOff op) left right = do
     left' <- calcExpr labelDef wa left
     right' <- calcExpr labelDef wa right
     case (left', right') of

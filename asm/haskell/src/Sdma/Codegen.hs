@@ -34,7 +34,7 @@ fixLabels start = snd . (foldl' step (start, []))
               in
                 (newpos, newld)
           advance Nothing pos = pos
-          advance (Just (Statement (WithPos _ _ nmemonic) opr)) pos =
+          advance (Just (Statement (WithPos _ nmemonic) opr)) pos =
               case nmemonic of
                 ".dc.b" -> advanceAddr (toByteAddr pos) (length opr)
                 ".dc.w" -> wordAdvance pos (length opr)
@@ -93,7 +93,7 @@ generate pos ld lns =
     bytesToWord _ = error "Can't happen"
 
 generateOne :: [LabelDef] -> CodeAddr -> Statement -> Parser (CodeAddr, MachineCode)
-generateOne ld pos statement@(Statement (WithPos _ nmemonicOffset nmemonic) opr) =
+generateOne ld pos statement@(Statement (WithPos nmemonicOffset nmemonic) opr) =
   -- directives that generate other than one-word code
     case nmemonic of
       --".ascii"   -- not yet
@@ -159,7 +159,7 @@ generateOne ld pos statement@(Statement (WithPos _ nmemonicOffset nmemonic) opr)
 
 
 generateWord :: [LabelDef] -> CodeAddr -> Statement -> GenInstruction
-generateWord ld pos statement@(Statement (WithPos _ nmemonicOffset nmemonic) _) = generateOne' statement
+generateWord ld pos statement@(Statement (WithPos nmemonicOffset nmemonic) _) = generateOne' statement
   where
     generateOne' =
       case nmemonic of
@@ -315,7 +315,7 @@ generateWord ld pos statement@(Statement (WithPos _ nmemonicOffset nmemonic) _) 
           return 0
 
     registerErrorMessage = "a General Purpose register is required"
-    getRegNumber (Register (WithPos _ off r)) =
+    getRegNumber (Register (WithPos off r)) =
         if r <= 7
         then return (toWord16 r)
         else genError off registerErrorMessage
@@ -332,7 +332,7 @@ generateWord ld pos statement@(Statement (WithPos _ nmemonicOffset nmemonic) _) 
     toomany = badNumberOfOperands "too many operands"
 
 badNumberOfOperands :: String -> Int -> (WithPos String) -> GenInstruction
-badNumberOfOperands s n (WithPos _ off nm) =
+badNumberOfOperands s n (WithPos off nm) =
     genError off $ s ++ " for " ++ nm ++ ". requires " ++ (show n) ++ " operands."
 
 checkValueRange :: (Integral a, Show a) => Int -> Int -> AsmExpr -> a -> Parser a

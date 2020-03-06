@@ -39,10 +39,7 @@ import Text.Megaparsec.Debug
 import Debug.Trace
 
 data WithPos a = WithPos
-  { startPos :: SourcePos
-  --, endPos :: SourcePos
-  --, tokenLength :: Int
-  , startOff :: Int
+  { startOff :: Int
   , tokenVal :: a
   } deriving (Eq, Ord, Show)
 
@@ -142,11 +139,11 @@ data AsmExpr
 findOffset :: AsmExpr -> Int
 findOffset expr =
   case expr of
-    Leaf (WithPos _ o _) -> o
-    UnaryExpr (WithPos _ o _) _ -> o
-    BinaryExpr (WithPos _ o _) _ _ -> o
+    Leaf (WithPos o _) -> o
+    UnaryExpr (WithPos o _) _ -> o
+    BinaryExpr (WithPos o _) _ _ -> o
     Indexed l _ -> findOffset l
-    Register (WithPos _ o _) -> o
+    Register (WithPos o _) -> o
 
 
 parseOperand :: FilePath -> Text -> Either (ParseErrorBundle Text Void) AsmExpr
@@ -179,10 +176,9 @@ binary  c = InfixL (binaryExpr (char c))
 
 withPosExpr expr c op = do
   off <- getOffset
-  pos <- getSourcePos
   _ <- op
   sc
-  return $ expr (WithPos pos off [c])
+  return $ expr (WithPos off [c])
 
 expr :: Parser AsmExpr
 expr = makeExprParser term operatorTable
@@ -211,13 +207,13 @@ operand = try (parens indexedAddressing) <|> try register <|> expr
 register :: Parser AsmExpr
 register = lexeme identifier >>= register'
   where
-    register' (WithPos pos off (Identifier regname)) =
+    register' (WithPos off (Identifier regname)) =
         if length regname /= 2 || toLower (head regname) /= 'r'
         then fail "not register"
         else let regnum = digitToInt (head (tail regname))
              in
                if regnum <= 7
-               then return $ Register (WithPos pos off (fromIntegral regnum))
+               then return $ Register (WithPos off (fromIntegral regnum))
                else fail "invalid register number"
     register' _ = fail "not register"
 
@@ -261,7 +257,7 @@ withPos p = do
   pos <- getSourcePos
   off <- getOffset
   a <- p
-  return $ WithPos pos off a
+  return $ WithPos off a
 
 lexer :: Parser [WithPos AsmToken]
 lexer = do
@@ -273,10 +269,9 @@ lexer = do
 lexeme :: Parser a -> Parser (WithPos a)
 lexeme p = do
     offBefore <- getOffset
-    posBefore <- getSourcePos
     a <- p
     sc
-    return $ WithPos posBefore offBefore a
+    return $ WithPos offBefore a
 
 --symbol :: Text -> Parser Text
 --symbol s = dbg "symbol" $ L.symbol empty s

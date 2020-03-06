@@ -12,13 +12,6 @@ import Data.Text (Text)
 import Data.Word
 import qualified Data.Text as T
 
-at :: Int -> Int -> Int -> Int -> a -> WithPos a
-at line col len off = WithPos (SourcePos "" (mkPos line) (mkPos col)) off
-at' line col len = at line col len (col-1)
-
-eol :: Int -> Int -> Int -> WithPos AsmToken
-eol line col off = WithPos (SourcePos "" (mkPos line) (mkPos col)) off Eol
-
 --testExpr str expect = TestCase $ Right expect @=? (parseOperand "" str)
 
 
@@ -50,46 +43,46 @@ data SimplifiedExpr
 
 simplify :: AsmExpr -> SimplifiedExpr
 simplify expr = case expr of
-               Leaf (WithPos _ _ t) -> Leaf' t
-               UnaryExpr (WithPos _ _ op) e -> UnaryExpr' op (simplify e)
-               BinaryExpr (WithPos _ _ op) l r -> BinaryExpr' op (simplify l) (simplify r)
+               Leaf (WithPos _ t) -> Leaf' t
+               UnaryExpr (WithPos _ op) e -> UnaryExpr' op (simplify e)
+               BinaryExpr (WithPos _ op) l r -> BinaryExpr' op (simplify l) (simplify r)
                Indexed r d -> Indexed' (simplify r) (simplify d)
-               Register (WithPos _ _ w) -> Register' w
+               Register (WithPos _ w) -> Register' w
 
 testParser :: Test
 testParser = TestList
         [ TestLabel "test for tokens" $
             TestList
             [
-              TestCase $ tokenize "" "+" @?= [at' 1 1 1 (Symbol "+")]
-            , TestCase $ tokenize "" "   -   " @?= [at' 1 4 1 (Symbol "-")]
-            , TestCase $ tokenize "" "  \n\r\n  \n" @?= [ at' 1 3 1  Eol
-                                                        , at 3 3 1 7 Eol
+              TestCase $ tokenize "" "+" @?= [WithPos 0 (Symbol "+")]
+            , TestCase $ tokenize "" "   -   " @?= [WithPos 3 (Symbol "-")]
+            , TestCase $ tokenize "" "  \n\r\n  \n" @?= [ WithPos 2 Eol
+                                                        , WithPos 7 Eol
                                                         ]
-            , TestCase $ tokenize "" "  abc ; ._xyz01" @?= [ at' 1 3 3 (Identifier "abc")
-                                                           , at' 1 7 1 (Symbol ";")
-                                                           , at' 1 9 7 (Identifier "._xyz01")
+            , TestCase $ tokenize "" "  abc ; ._xyz01" @?= [ WithPos 2 (Identifier "abc")
+                                                           , WithPos 6 (Symbol ";")
+                                                           , WithPos 8 (Identifier "._xyz01")
                                                        ]
-            , TestCase $ tokenize ""  "   0xabcd" @?= [at' 1 4 6 (Number 0xabcd)]
-            , TestCase $ tokenize ""  "123*0b01011111" @?= [ at' 1 1 3 (Number 123)
-                                                           , at' 1 4 1 (Symbol "*")
-                                                           , at' 1 5 10 (Number 0x5f)]
+            , TestCase $ tokenize ""  "   0xabcd" @?= [WithPos 3 (Number 0xabcd)]
+            , TestCase $ tokenize ""  "123*0b01011111" @?= [ WithPos 0 (Number 123)
+                                                           , WithPos 3 (Symbol "*")
+                                                           , WithPos 4 (Number 0x5f)]
             -- comment
-            , TestCase $ tokenize ""  "123  # abc  \ndef" @?= [ at' 1 1 3 (Number 123)
-                                                              , eol 1 13 12
-                                                              , at 2 1 3 13 (Identifier "def")
+            , TestCase $ tokenize ""  "123  # abc  \ndef" @?= [ WithPos 0 (Number 123)
+                                                              , WithPos 12 Eol
+                                                              , WithPos 13 (Identifier "def")
                                                               ]
-            , TestCase $ tokenize "" "123@xxx\n42" @?= [ at' 1 1 3 (Number 123)
-                                                       , at' 1 4 4 (Unknown '@')
-                                                       , eol 1 8 7
-                                                       , at 2 1 2 8(Number 42)
+            , TestCase $ tokenize "" "123@xxx\n42" @?= [ WithPos 0 (Number 123)
+                                                       , WithPos 3 (Unknown '@')
+                                                       , WithPos 7 Eol
+                                                       , WithPos 8 (Number 42)
                                                        ]
             ]
         , TestLabel "test for expressions" $
-            TestList [ testExpr "xyz" (Leaf (at 1 4 3 3 (Identifier "xyz")))
-                     , testExpr " 123" (Leaf (at 1 5 3 4 (Number 123)))
+            TestList [ testExpr "xyz" (Leaf (WithPos 3 (Identifier "xyz")))
+                     , testExpr " 123" (Leaf (WithPos 4 (Number 123)))
                      , testExprS "0xabcd" (Leaf' (Number 0xabcd))
-                     , testExpr "+3" (UnaryExpr (at 1 4 1 3 "+") (Leaf (at 1 5 1 4 (Number 3))))
+                     , testExpr "+3" (UnaryExpr (WithPos 3 "+") (Leaf (WithPos 4 (Number 3))))
                      , testExprS " + abc" (UnaryExpr' "+" (Leaf' (Identifier "abc")))
                      , testExprS "1+3" (BinaryExpr' "+"
                                         (Leaf' (Number 1))
@@ -99,9 +92,9 @@ testParser = TestList
                                           (Leaf' (Number 5))
                                           (UnaryExpr' "-" (Leaf' (Identifier "abc")))
                                           )
-                     , testExpr "3f-5b" (BinaryExpr (at 1 6 1 5 "-")
-                                          (Leaf (at 1 4 1 3 (LocalLabelRef Forward 3)))
-                                          (Leaf (at 1 7 1 6 (LocalLabelRef Backward 5)))
+                     , testExpr "3f-5b" (BinaryExpr (WithPos 5 "-")
+                                          (Leaf (WithPos 3 (LocalLabelRef Forward 3)))
+                                          (Leaf (WithPos 6 (LocalLabelRef Backward 5)))
                                          )
                      , testExprS "3 + 5 * (.xx_y-2)" (BinaryExpr' "+"
                                                       (Leaf' (Number 3))
@@ -122,42 +115,42 @@ testParser = TestList
         , TestLabel "test for statement" $
             TestList [ testEmptyLine "" []
                      , testEmptyLine " label1: label2:label3:   # comment"
-                                     [(at' 1 2 7  (Label "label1")),
-                                      (at' 1 10 7 (Label "label2")),
-                                      (at' 1 17 7 (Label "label3"))]
+                                     [(WithPos 1  (Label "label1")),
+                                      (WithPos 9 (Label "label2")),
+                                      (WithPos 16 (Label "label3"))]
                      , testEmptyLine "10: 11:123:   # comment"
-                                     [(at' 1 1 3 (LocalLabel 10)),
-                                      (at' 1 5 3 (LocalLabel 11)),
-                                      (at' 1 8 4 (LocalLabel 123))]
+                                     [(WithPos 0 (LocalLabel 10)),
+                                      (WithPos 4 (LocalLabel 11)),
+                                      (WithPos 7 (LocalLabel 123))]
 
-                     , testLine "ret" [] (at' 1 1 3 "ret") []
-                     , testLine "rorb r5" [] (at' 1 1 4 "rorb")
-                                [Register (at' 1 6 2  5)]
-                     , testLine "addi r4, 10" [] (at' 1 1 4 "addi")
-                                [ Register (at' 1 6 2 4)
-                                , Leaf (at' 1 10 2 (Number 10))
+                     , testLine "ret" [] (WithPos 0 "ret") []
+                     , testLine "rorb r5" [] (WithPos 0 "rorb")
+                                [Register (WithPos 5  5)]
+                     , testLine "addi r4, 10" [] (WithPos 0 "addi")
+                                [ Register (WithPos 5 4)
+                                , Leaf (WithPos 9 (Number 10))
                                 ]
 
-                     , testLine "ld   r1, (r2, -4)" [] (at' 1 1 2 "ld")
-                                [ Register (at' 1 6 2 1)
-                                , Indexed (Register (at' 1 11 2 2))
-                                          (UnaryExpr (at' 1 15 1 "-")
-                                           (Leaf (at' 1 16 1 (Number 4))))
+                     , testLine "ld   r1, (r2, -4)" [] (WithPos 0 "ld")
+                                [ Register (WithPos 5 1)
+                                , Indexed (Register (WithPos 10 2))
+                                          (UnaryExpr (WithPos 14 "-")
+                                           (Leaf (WithPos 15 (Number 4))))
                                 ]
-                     , testLine "addi r7, foo + 3*(bar-5)" [] (at' 1 1 4 "addi")
-                                [ Register (at' 1 6 2 7)
-                                , BinaryExpr (at' 1 14 1 "+")
-                                  (Leaf (at' 1 10 3 (Identifier "foo")))
-                                  (BinaryExpr (at' 1 17 1 "*")
-                                   (Leaf (at' 1 16 1 (Number 3)))
-                                   (BinaryExpr (at' 1 22 1 "-")
-                                    (Leaf (at' 1 19 3 (Identifier "bar")))
-                                    (Leaf (at' 1 23 1 (Number 5))))
+                     , testLine "addi r7, foo + 3*(bar-5)" [] (WithPos 0 "addi")
+                                [ Register (WithPos 5 7)
+                                , BinaryExpr (WithPos 13 "+")
+                                  (Leaf (WithPos 9 (Identifier "foo")))
+                                  (BinaryExpr (WithPos 16 "*")
+                                   (Leaf (WithPos 15 (Number 3)))
+                                   (BinaryExpr (WithPos 21 "-")
+                                    (Leaf (WithPos 18 (Identifier "bar")))
+                                    (Leaf (WithPos 22 (Number 5))))
                                   )
                                 ]
 
-                     , testLine "label: ret" [(at' 1 1 6 (Label "label"))]
-                                             (at' 1 8 3 "ret") []
+                     , testLine "label: ret" [(WithPos 0 (Label "label"))]
+                                             (WithPos 7 "ret") []
                      ]
         ]
 
