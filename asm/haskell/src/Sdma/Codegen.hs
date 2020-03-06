@@ -39,7 +39,7 @@ fixLabels start = snd . (foldl' step (start, []))
                 ".dc.b" -> advanceAddr (toByteAddr pos) (length opr)
                 ".dc.w" -> wordAdvance pos (length opr)
                 ".dc" -> wordAdvance pos (length opr)
-                ".dc.l" -> wordAdvance  pos (2 * length opr)
+                ".dc.l" -> alignAddr 2 $ wordAdvance  pos $ 2 * length opr
                 _ -> wordAdvance pos 1
           wordAdvance a l = advanceAddr (toWordAddr a) l
 
@@ -146,15 +146,17 @@ generateOne ld pos statement@(Statement (WithPos nmemonicOffset nmemonic) opr) =
                              w <- genData getWord a opr
                              return (advanceAddr a (length w), Words (map fromIntegral w))
 
-    genLongData = let a = toWordAddr pos
+    genLongData = let a0 = toWordAddr pos
+                      a = alignAddr 2 a0
                   in
                     if null opr
                     then missingOperands a
                     else do
                             ls <- genData getLong a opr
+                            let ws = concat $ map (\l -> [ toWord16 ((shift l (-16)) .&. 0xffff)
+                                                                 , toWord16 (l .&. 0xffff)]) ls
                             return ( advanceAddr a (2 * (length ls))
-                                   , Words $ concat $ map (\l -> [ toWord16 ((shift l (-16)) .&. 0xffff)
-                                                                 , toWord16 (l .&. 0xffff)]) ls )
+                                   , Words $ if a0 == a then ws else 0:ws )
 
 
 

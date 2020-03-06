@@ -127,18 +127,32 @@ testGenerator = TestList
                      , testGen ".dc.b 1, 2, 3;.dc 4"
                                [0x0102, 0x0300, 0x0004] -- auto alignment
                      , testGen ".dc.b 1 ;.dc.l 0x12345678"
-                               [0x0100, 0x1234, 0x5678] -- aliigned to word baundary, not long word
+                               [0x0100, 0x0000, 0x1234, 0x5678] -- aliigned to 2-word baundary
                      ]
         , TestLabel "keep track with code address" $
             TestList [ testGen (  "1: bt 99f\n"
                                ++ "   .dc.b 1, 2, 3\n"
                                ++ "   .dc.l 0xdeadbeef\n"
                                ++ "99:")
-                               [0x7d04, 0x0102, 0x0300, 0xdead, 0xbeef]
+                               [0x7d05, 0x0102, 0x0300, 0x0000, 0xdead, 0xbeef]
                      , testGen (  "1: bt 99f\n"
                                ++ "   .dc.w 1, 2\n"
                                ++ "99:")
                                [0x7d02, 0x0001, 0x0002]
+                     , testGen (  "1: bt 99f\n"
+                               ++ "   .dc.b 1, 2, 3, 4\n"
+                               ++ "99:")
+                               [0x7d02, 0x0102, 0x0304]
+                     , testGen (  "1: bt 99f\n"
+                               ++ "   .dc.b 1, 2, 3\n"
+                               ++ "99:")
+                               [0x7d02, 0x0102, 0x0300]
+                     , testGen (  "1: bt 99f\n"
+                               ++ "   .dc.w 0xabcd\n"
+                               ++ "   .dc.l 0x12345678\n"
+                               ++ "99:")
+                               [0x7d03, 0xabcd, 0x1234, 0x5678]
+
                      ]
         ]
 
