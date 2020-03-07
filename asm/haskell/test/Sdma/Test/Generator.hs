@@ -134,22 +134,26 @@ testGenerator = TestList
                      , testInstruction ".dc.w 0xabcd" 0xabcd
                      , testGen ".dc.b 0x12, 0x13, 0x14, 0x15" [0x1213, 0x1415] -- Big endian
                      , testGen ".dc.b 0x12, 0x13, 0x14" [0x1213, 0x1400]
-                     , testGen "1: .dc 0x1234, 1b-." [0x1234, 0xffff]
+                     , testGen "1: .dc.w 0x1234, 1b-." [0x1234, 0xffff]
                      , testGen ".dc.l 42" [0, 42]
                      , testGen ".dc.l 0xdeadbeef" [0xdead, 0xbeef]
                      , testGen ".dc.b 1, 2, 3\n.dc.b 4, 5, 6, 7\n.dc.w 8"
                                [0x0102, 0x0304, 0x0506, 0x0700, 0x0008]  -- auto alignment
-                     , testGen ".dc.b 1, 2, 3;.dc 4"
+                     , testGen ".dc.b 1, 2, 3;.dc.w 4"
                                [0x0102, 0x0300, 0x0004] -- auto alignment
-                     , testGen ".dc.b 1 ;.dc.l 0x12345678"
-                               [0x0100, 0x0000, 0x1234, 0x5678] -- aliigned to 2-word baundary
+                     , testGenError Nothing ".dc.b 1 ;.dc.l 0x12345678"
+                                    "not aligned to 2-word boundary"
+                     , testGenError Nothing ".dc.w 1 ;.dc.l 0x12345678"
+                                    "not aligned to 2-word boundary"
+                     , testGenAbs 0x0401 ".dc.w 0xabab\n.dc.l 0xdeadbeef\n"
+                                  [0xabab, 0xdead, 0xbeef]
                      ]
         , TestLabel "keep track with code address" $
             TestList [ testGen (  "1: bt 99f\n"
-                               ++ "   .dc.b 1, 2, 3\n"
+                               ++ "   .dc.b 1\n"
                                ++ "   .dc.l 0xdeadbeef\n"
                                ++ "99:")
-                               [0x7d05, 0x0102, 0x0300, 0x0000, 0xdead, 0xbeef]
+                               [0x7d03, 0x0100, 0xdead, 0xbeef]
                      , testGen (  "1: bt 99f\n"
                                ++ "   .dc.w 1, 2\n"
                                ++ "99:")
