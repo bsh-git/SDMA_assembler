@@ -3,11 +3,16 @@
 module Main where
 
 import Data.Text (Text)
+import qualified Data.Text as T
 import qualified Data.Text.IO as Txtio
+import Data.ByteString (ByteString)
+import qualified Data.ByteString.Char8 as B
+import Data.Text.Encoding (decodeUtf8)
 import System.Environment
 import System.IO
 import qualified System.Exit
 import Sdma
+import Sdma.Cpp
 
 
 main :: IO ()
@@ -15,8 +20,8 @@ main = do
     args <- getArgs
 
     case length args of
-      0 -> Txtio.hGetContents stdin >>= processFile "(stdin)"
-      1 -> Txtio.readFile (head args) >>= processFile (head args)
+      0 -> B.hGetContents stdin >>= processFile "(stdin)"
+      1 -> B.readFile (head args) >>= processFile (head args)
       _ -> die $ "too many argments" ++ (show args)
 
 
@@ -26,9 +31,11 @@ die msg = do
     System.Exit.die (progname ++ ": " ++ msg)
 
 
-processFile :: FilePath -> Text -> IO ()
+processFile :: FilePath -> ByteString -> IO ()
 processFile filename contents = do
-    either reportError outputCodes $ assembleFile filename contents Nothing
+    spi <- cppMarks filename contents
+
+    either reportError outputCodes $ assembleFile filename (decodeUtf8 contents) Nothing spi
 
   where
       reportError e = do

@@ -7,16 +7,19 @@ import Test.HUnit hiding (Label)
 import Sdma
 import Sdma.Parser
 import Sdma.Codegen
+import Sdma.Cpp
 import Data.Text
 import Data.Word
 --import qualified Data.Text.IO as Txtio
 
 --import Debug.Trace
 
+spi = initSourcePosInfo "(file)"
+
 testBranch opc expect = testInstruction' "1: " (opc ++ " 1b") expect
 testInstruction = testInstruction' ""
 testInstruction' label insn expect = TestCase $ Right [expect] @=?
-  assembleFile "(file)" (pack (label ++ insn)) Nothing
+  assembleFile "(file)" (pack (label ++ insn)) Nothing spi
 
 testPass1 str expect = TestCase $ pass1 $ parseSdmaAsm "(file)" str
   where pass1 = either parserFail check
@@ -27,19 +30,19 @@ parserFail = assertString . ("parse error: " ++) . show
 
 testGen :: String -> [Word16] -> Test
 testGen str expect = TestCase $
-    assembleFile "(file)" (pack str) (Just 0x400) @?= Right expect
+    assembleFile "(file)" (pack str) (Just 0x400) spi @?= Right expect
 
 testGenRel :: String -> [Word16] -> Test
 testGenRel str expect = TestCase $
-    assembleFile "(file)" (pack str) Nothing @?= Right expect
+    assembleFile "(file)" (pack str) Nothing spi @?= Right expect
 
 testGenAbs :: Word16 -> String -> [Word16] -> Test
 testGenAbs addr str expect = TestCase $
-    assembleFile "(file)" (pack str) (Just addr) @?= Right expect
+    assembleFile "(file)" (pack str) (Just addr) spi @?= Right expect
 
 testGenError :: Maybe Word16 -> Text -> Text -> Test
 testGenError addr src expect = TestCase $
-    case assembleFile "(file)" src addr of
+    case assembleFile "(file)" src addr spi of
       Left msg -> assertBool ("expected error message containing \"" ++ (unpack expect) ++ "\", but got " ++ msg)
                              (expect `isInfixOf` (pack msg))
       Right w -> assertFailure $ "assemble error expected, but succeeded: " ++ (show w)

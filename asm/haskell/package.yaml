@@ -27,6 +27,9 @@ dependencies:
 - parser-combinators
 - list-singleton
 - mtl
+- bytestring
+- regex-pcre
+- array
 
 library:
   source-dirs: src
