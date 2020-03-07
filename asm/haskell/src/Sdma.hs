@@ -12,13 +12,13 @@ import Sdma.Codegen
 
 -- import Debug.Trace
 
-assembleFile :: FilePath -> Text -> Word16 -> Either String [Word16]
+assembleFile :: FilePath -> Text -> Maybe Word16 -> Either String [Word16]
 assembleFile filename source startAddr = do
     either reportErrors Right $ parse (asmFile >>= gen) filename source
   where
-    gen insn = generate (WordAddr startAddr) (fixLabels (WordAddr startAddr) insn) insn
+    gen insn = generate start (fixLabels start insn) insn
     reportErrors  = (Left . errorBundlePretty)
-
+    start = maybe (WordAddr Rel 0) (WordAddr Abs) startAddr
 
 writeCodes :: FilePath -> Handle -> [Word16] -> IO ()
 writeCodes sourceFilename outputHandle codes = do

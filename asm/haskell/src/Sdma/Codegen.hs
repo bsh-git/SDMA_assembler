@@ -118,15 +118,15 @@ generateOne ld pos statement@(Statement (WithPos nmemonicOffset nmemonic) opr) =
 
     getData addressAllowed addr expr = do
         val <- calcExpr ld addr expr
-        case val of
-           (Num n) -> return n
-           (Address a) -> if addressAllowed
-                          then return $ fromIntegral a
-                          else generatorError 0 (findOffset expr) "address not allowed"
+        case (isAbsolute pos, addressAllowed, val) of
+           (_, _, Num n) -> return n
+           (True, True, Address a) -> return $ fromIntegral a
+           (_, False, _) -> generatorError 0 (findOffset expr) "address not allowed"
+           (False, _, _) -> generatorError 0 (findOffset expr) "relocatable address not allowed"
 
     toWord8 v = (fromIntegral v) :: Word8
-    getByte a e = getData False a e >>= checkValueRange 0 0xff e >>= pure . toWord8
-    getWord a e = getData True a e >>= checkValueRange 0 0xffff e >>= pure . toWord16
+    getByte a e = getData False a e >>= pure . toWord8 >>= checkValueRange 0 0xff e
+    getWord a e = getData True a e >>= pure . toWord16 >>= checkValueRange 0 0xffff e
     toWord32 v = (fromIntegral v) :: Word32
     getLong a e = getData True a e >>= pure . toWord32
     genData :: Integral a => (CodeAddr -> AsmExpr -> Parser a)
@@ -349,13 +349,17 @@ checkValueRange mn mx expr val =
 genJump :: [LabelDef] -> CodeAddr -> Word16 -> Statement -> GenInstruction
 genJump ld pos pat (Statement _ [opr]) = (jump =<< (calcExpr ld pos opr))
   where
-    jump (Address target) = jump' target   -- XXX need relocate
     jump (Num target) = jump' target -- jmp 0xDEAD
+    jump (Address target) =
+        if isAbsolute pos  -- are we assembling to absolute address?
+        then jump' target
+        else genError off "relocatable address cannot be used. (enabled in the future)"
     jump' target =
       if target < 0 || target > 0x3fff
-      then genError (findOffset opr)
+      then genError off
                      $ "Address out of range: " ++ (printf "target=%#x" target)
       else return $ pat .|. (toWord16 target)
+    off = findOffset opr
 genJump _ _ _ _ = cantHappen
 
 

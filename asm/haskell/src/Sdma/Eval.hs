@@ -12,9 +12,9 @@ type LabelDef = (Word16, [WithPos Label])
 
 addLabelDef :: [LabelDef] -> [WithPos Label] -> CodeAddr -> [LabelDef]
 addLabelDef ld [] _ = ld
-addLabelDef _ _ (ByteAddr _) = error "byte address is not allowed for label"
-addLabelDef [] new (WordAddr a) = [(a, new)]
-addLabelDef ld@((pos0, lbl):ls) new (WordAddr pos)
+addLabelDef _ _ (ByteAddr _ _) = error "byte address is not allowed for label"
+addLabelDef [] new (WordAddr _ a) = [(a, new)]
+addLabelDef ld@((pos0, lbl):ls) new (WordAddr _ pos)
     | pos0 == pos = (pos, new ++ lbl):ls   -- multiple labels at the same position in several lines
     | otherwise = (pos, new):ld
 
@@ -30,8 +30,8 @@ findLabel ld s = case found of
 -- (Label s) `elem` (snd d)
 
 findLocalLabel :: [LabelDef] -> Word -> LabelRefDirection -> CodeAddr -> Maybe Word16
-findLocalLabel id n dir (ByteAddr a) = error "byte address is not allowed"
-findLocalLabel ld n dir (WordAddr a) = findLocalLabel' ld n dir a
+findLocalLabel _ _ _ (ByteAddr _ _) = error "byte address is not allowed"
+findLocalLabel ld n dir (WordAddr _ a) = findLocalLabel' ld n dir a
   where
     findLocalLabel' ld n dir pos =
         case (null filtered, dir) of
@@ -54,8 +54,8 @@ data Value = Num Int | Address Word16
 
 calcExpr :: [LabelDef] -> CodeAddr -> AsmExpr -> Parser Value
 
-calcExpr labelDef a@(ByteAddr _) expr = calcExpr labelDef (toWordAddr a) expr
-calcExpr labelDef wa@(WordAddr pos) expr =
+calcExpr labelDef a@(ByteAddr _ _) expr = calcExpr labelDef (toWordAddr a) expr
+calcExpr labelDef wa@(WordAddr _ pos) expr =
     case expr of
       Leaf (WithPos _ (Number n)) -> return (Num (fromIntegral n))
       Leaf (WithPos off (Identifier s)) ->
@@ -107,7 +107,7 @@ binaryExpr labelDef wa (WithPos opOff op) left right = do
         case (op, l, r) of
           ("+", (Address addr), (Num v)) -> return $ Address (addr + (fromIntegral v))
           ("+", (Num l'), (Num r')) -> return $ Num (l' + r')
-          ("-", (Address l'), (Address r')) -> return $ Address (l' - r')
+          ("-", (Address l'), (Address r')) -> return $ Num $ fromIntegral l' - fromIntegral r'
           ("-", (Address addr), (Num v)) -> return $ Address (addr - (fromIntegral v))
           ("-", (Num l'), (Num r')) -> return $ Num (l' + r')
           (_, (Address _), _) -> evalError opOff $ "Bad expression: " ++ op ++ " to Address"

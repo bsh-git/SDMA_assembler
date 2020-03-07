@@ -16,18 +16,33 @@ import Data.Word
 testBranch opc expect = testInstruction' "1: " (opc ++ " 1b") expect
 testInstruction = testInstruction' ""
 testInstruction' label insn expect = TestCase $ Right [expect] @=?
-  assembleFile "(file)" (pack (label ++ insn)) 0
+  assembleFile "(file)" (pack (label ++ insn)) Nothing
 
 testPass1 str expect = TestCase $ pass1 $ parseSdmaAsm "(file)" str
   where pass1 = either parserFail check
-        check insn = expect @=? fixLabels (WordAddr 0) insn
+        check insn = expect @=? fixLabels (WordAddr Rel 0) insn
+
+parserFail = assertString . ("parse error: " ++) . show
+
 
 testGen :: String -> [Word16] -> Test
 testGen str expect = TestCase $
-    assembleFile "(file)" (pack str) 0 @?= Right expect
+    assembleFile "(file)" (pack str) (Just 0x400) @?= Right expect
 
-parserFail = assertString . ("parse error: " ++) . show
---codegenFail = assertString . ("assemble error: " ++) . show
+testGenRel :: String -> [Word16] -> Test
+testGenRel str expect = TestCase $
+    assembleFile "(file)" (pack str) Nothing @?= Right expect
+
+testGenAbs :: Word16 -> String -> [Word16] -> Test
+testGenAbs addr str expect = TestCase $
+    assembleFile "(file)" (pack str) (Just addr) @?= Right expect
+
+testGenError :: Maybe Word16 -> Text -> Text -> Test
+testGenError addr src expect = TestCase $
+    case assembleFile "(file)" src addr of
+      Left msg -> assertBool ("expected error message containing " ++ (unpack expect) ++ ", but got " ++ msg)
+                             (expect `isInfixOf` (pack msg))
+      Right _ -> assertFailure "assemble error expected, but succeeded"
 
 
 
@@ -153,6 +168,26 @@ testGenerator = TestList
                                ++ "99:")
                                [0x7d03, 0xabcd, 0x1234, 0x5678]
 
+                     ]
+        , TestLabel "relocatable / absolute address" $
+            TestList [ testGenRel (  "1: bt 2f\n"
+                                  ++ "   .dc.b 1, 2, 3\n"
+                                  ++ "2:\n"
+                                  ++ "   .dc.w 0xdead\n"
+                                  ++ "   .dc.w 2b-2f\n"
+                                  ++ "2:")
+                                  [0x7d02, 0x0102, 0x0300, 0xdead, 0xfffe]
+                     , testGenAbs 0x1700 (  "1: bt 99f\n"
+                                         ++ "   .dc.w 1, 2\n"
+                                         ++ "   jmp 99f\n"
+                                         ++ "   .dc.w 99f\n"
+                                         ++ "99:")
+                                  [0x7d04, 0x0001, 0x0002, 0x9705, 0x1705]
+                     , testGenRel "jmp 0x400" [0x8400]
+                     , testGenAbs 0x500 "jmp 0x400" [0x8400]
+                     -- error for now
+                     , testGenError Nothing "1: jmp 1b\n" "relocatable address"
+                     , testGenError Nothing "label: .dc.w label\n" "relocatable address"
                      ]
         ]
 

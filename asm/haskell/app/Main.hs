@@ -28,7 +28,7 @@ die msg = do
 
 processFile :: FilePath -> Text -> IO ()
 processFile filename contents = do
-    either reportError outputCodes $ assembleFile filename contents 0
+    either reportError outputCodes $ assembleFile filename contents Nothing
 
   where
       reportError e = do
