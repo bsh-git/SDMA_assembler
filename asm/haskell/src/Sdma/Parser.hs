@@ -35,6 +35,7 @@ import Text.Megaparsec.Char -- hiding (symbolChar)
 import qualified Text.Megaparsec.Char.Lexer as L
 import Control.Monad.Combinators.Expr
 import Text.Megaparsec.Debug
+import Sdma.Base
 
 import Debug.Trace
 
@@ -43,8 +44,6 @@ data WithPos a = WithPos
   , tokenVal :: a
   } deriving (Eq, Ord, Show)
 
-
-type Parser = Parsec Void Text
 
 parseSdmaAsm :: FilePath -> Text -> Either (ParseErrorBundle Text Void) [AsmLine]
 parseSdmaAsm fn input = parse asmFile fn input

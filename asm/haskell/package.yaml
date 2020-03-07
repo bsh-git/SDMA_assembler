@@ -26,6 +26,7 @@ dependencies:
 - containers
 - parser-combinators
 - list-singleton
+- mtl
 
 library:
   source-dirs: src

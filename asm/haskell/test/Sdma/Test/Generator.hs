@@ -40,9 +40,9 @@ testGenAbs addr str expect = TestCase $
 testGenError :: Maybe Word16 -> Text -> Text -> Test
 testGenError addr src expect = TestCase $
     case assembleFile "(file)" src addr of
-      Left msg -> assertBool ("expected error message containing " ++ (unpack expect) ++ ", but got " ++ msg)
+      Left msg -> assertBool ("expected error message containing \"" ++ (unpack expect) ++ "\", but got " ++ msg)
                              (expect `isInfixOf` (pack msg))
-      Right _ -> assertFailure "assemble error expected, but succeeded"
+      Right w -> assertFailure $ "assemble error expected, but succeeded: " ++ (show w)
 
 
 
@@ -120,14 +120,25 @@ testGenerator = TestList
                                  , (0, [ WithPos 18 (Label "label2")
                                        , WithPos 0 (Label "label1")])
                                  ]
-                     , testGen "1:.dc 1b-.\n2:.dc 2b-1b\n3:.dc 1f-.\n1:bdf 2b"
+                     , testGen "1:.dc.w 1b-.\n2:.dc.w 2b-1b\n3:.dc.w 1f-.\n1:bdf 2b"
                                [0x0000, 0x0001, 0x0001, 0x7ffd]
+                     , testGenAbs 0x1700 "1: 2: .dc.w 1b, 2b, 1b-2b"
+                                         [0x1700, 0x1700, 0]
+                     , testGenError Nothing "1: .dc.w foo" "foo: not defined"
+                     , testGenError Nothing "99: .dc.w 42f" "local label 42: not found"
+                     , testGenAbs 0x400 "1: .dc.w 1b" [0x0400]
+                     , testGenError (Just 0x400) "1: .dc.w 1f" "local label 1: not found"
+                     , testGenError (Just 0x400) "jmp exit" "exit: not defined"
+                     , testGenError (Just 0x400) "jmp 3f" "local label 3: not found"
                      ]
         , TestLabel "relative jump" $
             TestList [ testGen "label1: add r0, r0\nlabel2: bf label2\nlabel3: bf label1"
                                 [0x0098, 0x7cff, 0x7cfd]
                      , testGen "loop exit, 0\nadd r0, r0\nadd r0, r0\nexit: "
                                 [0x7802, 0x0098, 0x0098]
+                     , testGenError Nothing "1: loop foo" "foo: not defined"
+                     , testGenError Nothing "1: bf label1" "label1: not defined"
+                     , testGenError Nothing "2: bf 3f" "local label 3: not found"
                      ]
         , TestLabel "directives" $
             TestList [ testInstruction ".dc 0xabcd" 0xabcd
@@ -147,6 +158,9 @@ testGenerator = TestList
                                     "not aligned to 2-word boundary"
                      , testGenAbs 0x0401 ".dc.w 0xabab\n.dc.l 0xdeadbeef\n"
                                   [0xabab, 0xdead, 0xbeef]
+                     , testGenError Nothing "1: 2: .align 2,4" "too many"
+                     , testGenError Nothing "1: .align 1b" "labels are not allowed"
+                     , testGenError Nothing "label1: label2: .align label1-label2" "labels are not allowed"
                      ]
         , TestLabel "keep track with code address" $
             TestList [ testGen (  "1: bt 99f\n"
@@ -171,7 +185,16 @@ testGenerator = TestList
                                ++ "   .dc.l 0x12345678\n"
                                ++ "99:")
                                [0x7d03, 0xabcd, 0x1234, 0x5678]
-
+                     , testGen (  "  bt 99f\n"
+                               ++ "  .dc.w 1, label-.\n"
+                               ++ "  .align 2\n"
+                               ++ "label: .dc.l 0xdeadbeef\n"
+                               ++ "99:")
+                               [0x7d05, 0x0001, 0x0002, 0x0000, 0xdead, 0xbeef]
+                     , testGenAbs 0x1801 (  "  .dc.w label1\n"
+                                         ++ "  .align 2*2\n"
+                                         ++ "label1:\n")
+                                         [0x1804]
                      ]
         , TestLabel "relocatable / absolute address" $
             TestList [ testGenRel (  "1: bt 2f\n"
