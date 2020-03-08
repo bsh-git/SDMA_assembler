@@ -248,8 +248,8 @@ generateWord ld pos statement@(Statement (WithPos nmemonicOffset nmemonic) _) = 
         "tsti" -> immediate 0x4000 0xff
         "xor" -> tworegs 0x0090
         "xori" -> immediate 0x1000 0xff
-        "yeild" -> \_ -> return 0x0000        -- done 0
-        "yeildge" -> \_ -> return 0x0100       -- done 1
+        "yield" -> \_ -> return 0x0000        -- done 0
+        "yieldge" -> \_ -> return 0x0100       -- done 1
 
         _ -> \_ -> genError nmemonicOffset ("Unknown opcode " ++ nmemonic)
 
