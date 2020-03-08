@@ -133,7 +133,7 @@ binaryExpr labelDef wa (WithPos opOff op) left right = do
           ("+", (Num l'), (Num r')) -> return $ Num (l' + r')
           ("-", (Address l'), (Address r')) -> return $ Num $ fromIntegral l' - fromIntegral r'
           ("-", (Address addr), (Num v)) -> return $ Address (addr - (fromIntegral v))
-          ("-", (Num l'), (Num r')) -> return $ Num (l' + r')
+          ("-", (Num l'), (Num r')) -> return $ Num (l' - r')
           (_, (Address _), _) -> evalError opOff $ printf "Bad expression: ADDRESS %s ADDRSS" op
           ("*", (Num l'), (Num r')) -> return $ Num (l' * r')
           ("/", (Num l'), (Num r')) -> return $ Num (l' `div` r')
