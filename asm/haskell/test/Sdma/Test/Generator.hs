@@ -105,8 +105,8 @@ testGenerator = TestList
                      , testInstruction "xor r4, r7"     0x0497
                      , testInstruction "xori r4, 0xc3"  0x14c3
                      , testInstruction "xori r4, 0xc3"  0x14c3
-                     , testInstruction "yeild"          0x0000   -- done 0
-                     , testInstruction "yeildge"        0x0100   -- done 1
+                     , testInstruction "yield"          0x0000   -- done 0
+                     , testInstruction "yieldge"        0x0100   -- done 1
                      ]
 
         , TestLabel "Labels" $
