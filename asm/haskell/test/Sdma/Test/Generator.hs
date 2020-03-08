@@ -2,15 +2,15 @@
 --
 --
 module Sdma.Test.Generator where
-
+import Data.ByteString (ByteString)
+import qualified Data.ByteString as B
 import Test.HUnit hiding (Label)
 import Sdma
 import Sdma.Parser
 import Sdma.Codegen
 import Sdma.Cpp
-import Data.Text
 import Data.Word
---import qualified Data.Text.IO as Txtio
+import Data.List
 
 --import Debug.Trace
 
@@ -19,7 +19,7 @@ spi = initSourcePosInfo "(file)"
 testBranch opc expect = testInstruction' "1: " (opc ++ " 1b") expect
 testInstruction = testInstruction' ""
 testInstruction' label insn expect = TestCase $ Right [expect] @=?
-  assembleFile "(file)" (pack (label ++ insn)) Nothing spi
+  assembleFile "(file)" (sToBs (label ++ insn)) Nothing spi
 
 testPass1 str expect = TestCase $ pass1 $ parseSdmaAsm "(file)" str
   where pass1 = either parserFail check
@@ -30,21 +30,21 @@ parserFail = assertString . ("parse error: " ++) . show
 
 testGen :: String -> [Word16] -> Test
 testGen str expect = TestCase $
-    assembleFile "(file)" (pack str) (Just 0x400) spi @?= Right expect
+    assembleFile "(file)" (sToBs str) (Just 0x400) spi @?= Right expect
 
 testGenRel :: String -> [Word16] -> Test
 testGenRel str expect = TestCase $
-    assembleFile "(file)" (pack str) Nothing spi @?= Right expect
+    assembleFile "(file)" (sToBs str) Nothing spi @?= Right expect
 
 testGenAbs :: Word16 -> String -> [Word16] -> Test
 testGenAbs addr str expect = TestCase $
-    assembleFile "(file)" (pack str) (Just addr) spi @?= Right expect
+    assembleFile "(file)" (sToBs str) (Just addr) spi @?= Right expect
 
-testGenError :: Maybe Word16 -> Text -> Text -> Test
+testGenError :: Maybe Word16 -> String -> String -> Test
 testGenError addr src expect = TestCase $
-    case assembleFile "(file)" src addr spi of
-      Left msg -> assertBool ("expected error message containing \"" ++ (unpack expect) ++ "\", but got " ++ msg)
-                             (expect `isInfixOf` (pack msg))
+    case assembleFile "(file)" (sToBs src) addr spi of
+      Left msg -> assertBool ("expected error message containing \"" ++ expect ++ "\", but got " ++ msg)
+                             (expect `isInfixOf` msg)
       Right w -> assertFailure $ "assemble error expected, but succeeded: " ++ (show w)
 
 

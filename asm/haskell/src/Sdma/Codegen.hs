@@ -1,4 +1,5 @@
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE OverloadedStrings #-}
 --
 --
 module Sdma.Codegen
@@ -13,8 +14,8 @@ import Data.Word
 import Data.Bits
 import Data.List.Singleton
 import Data.Foldable
-import qualified Data.Text as T (empty)
 import qualified Data.Set (singleton)
+import qualified Data.ByteString as B
 import Text.Printf
 import Sdma.Parser hiding (AsmToken)
 import Sdma.Base
@@ -45,7 +46,7 @@ fixLabels start = snd . (foldl' step (start, []))
                 _ -> wordAdvance pos 1
           wordAdvance a l = advanceAddr (toWordAddr a) l
           align a (opr:_) =
-              case parse (calcExpr Nothing a opr) "" T.empty of
+              case parse (calcExpr Nothing a opr) "" B.empty of
                 Right (Num v) -> alignAddr v a
                 -- errors are reported in pass2
                 Right (Address _) -> a

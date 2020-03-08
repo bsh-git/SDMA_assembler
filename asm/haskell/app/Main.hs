@@ -7,7 +7,6 @@ import qualified Data.Text as T
 import qualified Data.Text.IO as Txtio
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as B
-import Data.Text.Encoding (decodeUtf8)
 import System.Environment
 import System.IO
 import qualified System.Exit
@@ -35,7 +34,7 @@ processFile :: FilePath -> ByteString -> IO ()
 processFile filename contents = do
     spi <- cppMarks filename contents
 
-    either reportError outputCodes $ assembleFile filename (decodeUtf8 contents) Nothing spi
+    either reportError outputCodes $ assembleFile filename contents Nothing spi
 
   where
       reportError e = do

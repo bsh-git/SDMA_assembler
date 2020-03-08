@@ -8,9 +8,8 @@ module Sdma.Test.Parser where
 import Test.HUnit hiding (Label)
 --import System.Environment
 import Sdma.Parser
-import Data.Text (Text)
 import Data.Word
-import qualified Data.Text as T
+import Sdma.Base
 
 --testExpr str expect = TestCase $ Right expect @=? (parseOperand "" str)
 
@@ -18,20 +17,20 @@ import qualified Data.Text as T
 getOperand (AsmLine _ (Just (Statement _ [expr]))) = expr
 
 testExpr str expect = TestCase $ Right expect @=?
-    (parseSdmaAsm "" (T.pack ("op " ++ str)) >>= return . getOperand . head)
+    (parseSdmaAsm "" (sToBs ("op " ++ str)) >>= return . getOperand . head)
 
 --
 -- ignore source position to make writing tests easier
 --
 testExprS str expect = TestCase $ Right expect @=?
-    (parseSdmaAsm "" (T.pack ("op " ++ str)) >>= return . simplify . getOperand . head)
+    (parseSdmaAsm "" (sToBs ("op " ++ str)) >>= return . simplify . getOperand . head)
 
 
 --[AsmLine labels Nothing]
-testEmptyLine :: Text -> [WithPos Label] -> Test
-testEmptyLine str labels = TestCase $ Right [AsmLine labels Nothing] @=? (parseSdmaAsm "" str)
-testLine :: Text -> [WithPos Label] -> WithPos String -> [AsmExpr] -> Test
-testLine str labels insn oprs = TestCase $ Right [(AsmLine labels (Just $ Statement insn oprs))] @=? (parseSdmaAsm "" str)
+testEmptyLine :: String -> [WithPos Label] -> Test
+testEmptyLine str labels = TestCase $ Right [AsmLine labels Nothing] @=? (parseSdmaAsm "" (sToBs str))
+testLine :: String -> [WithPos Label] -> WithPos String -> [AsmExpr] -> Test
+testLine str labels insn oprs = TestCase $ Right [(AsmLine labels (Just $ Statement insn oprs))] @=? (parseSdmaAsm "" (sToBs str))
 
 data SimplifiedExpr
   = Leaf' AsmToken

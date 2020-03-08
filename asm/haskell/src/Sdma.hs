@@ -2,27 +2,23 @@
 --
 module Sdma where
 
-import Data.Text (Text)
-import qualified Data.Text as T (pack, unpack)
+import Data.ByteString (ByteString)
 import Data.Word
 import Data.List
-import qualified Data.ByteString.Char8 as B
 import Text.Printf
 import System.IO
 import Sdma.Parser
 import Sdma.Codegen
 import Sdma.Cpp
+import Sdma.Base
 
 -- import Debug.Trace
 
-assembleFile :: FilePath -> Text -> Maybe Word16 -> [SourcePosInfo] -> Either String [Word16]
+assembleFile :: FilePath -> ByteString -> Maybe Word16 -> [SourcePosInfo] -> Either String [Word16]
 assembleFile filename source startAddr spi = do
     either reportErrors Right $ parse (asmFile >>= gen) filename source
   where
     gen insn = generate start (fixLabels start insn) insn
---    reportErrors  = (Left . errorBundlePretty)
---    reportErrors = (Left. show)
---    reportErrors = Left . show . (splitErrorBundle spi)
     reportErrors = Left . concat . (map  errorBundlePretty) . (splitErrorBundle spi)
     start = maybe (WordAddr Rel 0) (WordAddr Abs) startAddr
 

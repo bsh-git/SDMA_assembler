@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE FlexibleContexts #-}
 --
 --
 module Sdma.Parser ( AsmExpr(..)
@@ -18,26 +19,22 @@ module Sdma.Parser ( AsmExpr(..)
                    , module Text.Megaparsec
                    ) where
 
-import Data.Text (Text, pack, unpack)
-import qualified Data.Text  as T (foldl', all, head, tail)
 import Data.Void
 import Data.Char
-import Data.List (foldl')
 import Data.Functor (void)
-import Data.Either
 import Data.Word
 import qualified Data.Set
-import Control.Monad.HT (lift2, lift)
+import Data.ByteString (ByteString)
+import qualified Data.ByteString as B
+import Control.Monad.HT (lift2)
 import Text.Megaparsec hiding (Label, label, match)
---import Text.Megaparsec.Error
-import Text.Megaparsec.Char -- hiding (symbolChar)
---import Text.Megaparsec.Pos
-import qualified Text.Megaparsec.Char.Lexer as L
+import Text.Megaparsec.Byte -- hiding (symbolChar)
+import qualified Text.Megaparsec.Byte.Lexer as L
 import Control.Monad.Combinators.Expr
-import Text.Megaparsec.Debug
 import Sdma.Base
 
-import Debug.Trace
+--import Debug.Trace
+--import Text.Megaparsec.Debug
 
 data WithPos a = WithPos
   { startOff :: Int
@@ -45,14 +42,14 @@ data WithPos a = WithPos
   } deriving (Eq, Ord, Show)
 
 
-parseSdmaAsm :: FilePath -> Text -> Either (ParseErrorBundle Text Void) [AsmLine]
+parseSdmaAsm :: FilePath -> ByteString -> Either (ParseErrorBundle ByteString Void) [AsmLine]
 parseSdmaAsm fn input = parse asmFile fn input
 
 
 asmFile :: Parser [AsmLine]
 asmFile = (asmLine `sepBy` (void eol <|> void semiColon) <* eof)
   where
-    semiColon = some (char ';')
+    semiColon = some (singleC  ';')
 
 --
 -- statement
@@ -82,11 +79,11 @@ statement = do
     notFollowedBy (void eol <|> eof)
     withRecovery recover statement'
   where
-    recover e = Nothing <$ (registerParseError e >> skipMany (noneOf' "\r\n"))
+    recover e = Nothing <$ (registerParseError e >> takeWhilePC Nothing (`notElem` ("\r\n" :: String)))
     statement' = do
-      insn <- withPos (identifierChars <?> "a nmemonic or a directive")
+      insn <- withPos (bsToS `fmap` identifierChars <?> "a nmemonic or a directive")
       sc
-      opr <- operand `sepBy` (char ',' >> sc)
+      opr <- operand `sepBy` (singleC ',' >> sc)
       return $ Just $ Statement insn opr
 
 --
@@ -105,22 +102,24 @@ label :: Parser (WithPos Label)
 label = withPos (try goodLabel <|> badLabel)
 
 goodLabel :: Parser Label
-goodLabel = (lbl identifierChars Label
-             <|> lbl (many digitChar) (buildNumericToken LocalLabel 10))
+goodLabel = (lbl identifierChars mkLabel
+             <|> lbl (takeWhilePC Nothing isDigit) (buildNumericToken LocalLabel 10))
   where
-    lbl :: Parser String -> (String -> Label) -> (Parser Label)
-    lbl p f = f `fmap` (p <* (sc >> single ':' >> sc))
+    lbl :: Parser ByteString -> (ByteString -> Label) -> (Parser Label)
+    lbl p f = f `fmap` (p <* (sc >> singleC ':' >> sc))
+    mkLabel :: ByteString -> Label
+    mkLabel s = Label (bsToS s)
 
 badLabel :: Parser Label
 badLabel = do
     off <- getOffset
-    l <- unpack `fmap` takeWhileP Nothing (not . notLabelChar) <* (sc >> single ':' >> sc)
+    l <- takeWhilePC Nothing (not . notLabelChar) <* (sc >> singleC ':' >> sc)
     let e = ErrorFail "Bad label"
     registerParseError (FancyError off (Data.Set.singleton e))
-    return $ BadLabel l
+    return $ BadLabel (bsToS l)
   where
     -- eat wider range of chars to detect bad labels
-    notLabelChar c = isSpace c || c `elem` (":#;/" :: [Char])
+    notLabelChar c = isSpace c || c `elem` (":#;/" :: String)
 
 --
 -- Expression
@@ -145,7 +144,7 @@ findOffset expr =
     Register (WithPos o _) -> o
 
 
-parseOperand :: FilePath -> Text -> Either (ParseErrorBundle Text Void) AsmExpr
+parseOperand :: FilePath -> ByteString -> Either (ParseErrorBundle ByteString Void) AsmExpr
 parseOperand fn input = parse (blanks >> operand <* eof) fn input
 
 
@@ -164,12 +163,12 @@ operatorTable =
     ]
 
 prefix :: Char -> Operator Parser AsmExpr
-prefix c = Prefix (unary (char c)) -- (apply unary (char c))
+prefix c = Prefix (unary (singleC c)) -- (apply unary (char c))
   where
     unary op = withPosExpr UnaryExpr c op
 
 binary :: Char -> Operator Parser AsmExpr
-binary  c = InfixL (binaryExpr (char c))
+binary  c = InfixL (binaryExpr (singleC c))
   where
     binaryExpr op = withPosExpr BinaryExpr c op
 
@@ -186,7 +185,7 @@ term :: Parser AsmExpr
 term = tokenToExpr identifier <|> tokenToExpr numberOrLocalLabelRef <|> parens expr
 
 parens :: Parser AsmExpr -> Parser AsmExpr
-parens = between (char '(' >> sc) (char ')' >> sc)
+parens = between (singleC '(' >> sc) (singleC ')' >> sc)
 
 tokenToExpr p = do
   a <- lexeme p
@@ -197,7 +196,7 @@ operand = try (parens indexedAddressing) <|> try register <|> expr
   where
     indexedAddressing = do
         reg <- register
-        void $ char ','
+        void $ singleC ','
         sc
         e <- expr
         return $ Indexed reg e
@@ -207,9 +206,9 @@ register :: Parser AsmExpr
 register = lexeme identifier >>= register'
   where
     register' (WithPos off (Identifier regname)) =
-        if length regname /= 2 || toLower (head regname) /= 'r'
+        if B.length regname /= 2 || toLower (chr (fromIntegral (B.head regname))) /= 'r'
         then fail "not register"
-        else let regnum = digitToInt (head (tail regname))
+        else let regnum = digitToIntB (B.head (B.tail regname))
              in
                if regnum <= 7
                then return $ Register (WithPos off (fromIntegral regnum))
@@ -221,25 +220,28 @@ register = lexeme identifier >>= register'
 --
 data AsmToken
   = Eol
-  | Identifier String
+  | Identifier ByteString
   | Number Word
   | LocalLabelRef LabelRefDirection Word
   -- Items below are defined to tokenize all input. they are not used by the parser above.
-  | Symbol String
+  | Symbol ByteString
   | Unknown Char
   deriving (Eq, Show)
 
 data LabelRefDirection = Forward | Backward
     deriving (Eq, Show)
 
-tokenize :: FilePath -> Text -> [WithPos AsmToken]
+tokenize :: FilePath -> ByteString -> [WithPos AsmToken]
 tokenize fn input = either parseError id $ parse lexer fn input
   where
     parseError e = error (errorBundlePretty e)
 
 
-isBlank :: Char -> Bool
-isBlank c = c /= '\n' && c /= '\r' && isSpace c
+isBlank :: Word8 -> Bool
+isBlank = isBlankC . chr . fromIntegral
+
+isBlankC :: Char -> Bool
+isBlankC c = c /= '\n' && c /= '\r' && isSpace c
 
 --blank1 :: (MonadParsec e s m, Token s ~ Char) => m ()
 blank1 :: Parser ()
@@ -280,55 +282,76 @@ eols :: Parser AsmToken
 eols = some eol >> return Eol
 
 symbolToken :: Parser AsmToken
-symbolToken = oneOf' "()-+*%/;" >>= (return . Symbol . (:[]))
+--symbolToken = oneOf "()-+*%/;" >>= (return . Symbol . B.singleton)
+symbolToken = satisfy (`B.elem` "()-+*%/;") >>= (return . Symbol . B.singleton)
 
 identifier :: Parser AsmToken
 identifier = Identifier `fmap` identifierChars
 
-identifierChars :: Parser String
-identifierChars = lift2 (:) idChar0 (many idChar)
+identifierChars :: Parser ByteString
+identifierChars = lift2 B.cons idChar0 idChars
   where
-    idChar0 = letterChar  <|> oneOf' "_."
-    idChar = idChar0 <|> digitChar
+    idChar0 = satisfy isIdChar0
+    idChars = takeWhilePC Nothing isIdChar
+
+
+isIdChar0 :: Word8 -> Bool
+isIdChar0 = isIdChar0C . chr . fromIntegral
+
+isIdChar0C :: Char -> Bool
+isIdChar0C c = isAlpha c || c `elem` ("_." :: String)
+
+isIdChar :: Char -> Bool
+isIdChar c = isIdChar0C c || isDigit c
 
 numberOrLocalLabelRef :: Parser AsmToken
 numberOrLocalLabelRef = try hexadecimalNumber <|> try binaryNumber <|> decimalNumberOrLabelRef
   where
     hexadecimalNumber =
-      char '0' >> oneOf' "Xx" >> some hexDigitChar >>= return . (digitsToNumber 16)
+      singleC '0' >> oneOf' "Xx"
+        >> takeWhile1PC (Just "hexadecimal digit character") isHexDigit
+        >>= return . (digitsToNumber 16)
 
     binaryNumber = do
-      char '0' >> oneOf' "Bb" >> some (oneOf' "01") >>= return . (digitsToNumber 2)
+      singleC '0' >> oneOf' "Bb"
+          >> takeWhile1PC (Just "0 or 1") (`elem` ("01" :: String)) >>= return . (digitsToNumber 2)
 
     decimalNumberOrLabelRef = do
-        d <- some digitChar
-        suffix <- many alphaNumChar
+        d <- takeWhile1PC (Just "digits") isDigit
+        suffix <- takeWhilePC Nothing isAlphaNum
         case suffix of
           "" -> return $ digitsToNumber 10 d
           "f" -> return $ digitsToLabel Forward d
           "b" -> return $ digitsToLabel Backward d
-          _ -> fail $ "Bad number " ++ d ++ suffix
+          _ -> fail $ "Bad number " ++ (bsToS (B.append d suffix))
 
+    digitsToNumber :: Int -> ByteString -> AsmToken
     digitsToNumber base = buildNumericToken Number base
     digitsToLabel dir = buildNumericToken (LocalLabelRef dir) 10
 
-buildNumericToken :: (Word -> a) -> Int -> String -> a
-buildNumericToken t base = t . fromIntegral . (foldl' (\sm d -> sm * base + digitToInt d) 0)
+buildNumericToken :: (Word -> a) -> Int -> ByteString -> a
+buildNumericToken t base = t . fromIntegral . (B.foldl' (\sm d -> sm * base + digitToIntB d) 0)
 
 unknown :: Parser AsmToken
-unknown = anySingle <* skipMany (noneOf' "\r\n") >>= return . Unknown
+unknown = anySingle <* skipMany (noneOf' "\r\n") >>= return . Unknown . chr . fromIntegral
 
 
+singleC :: Char -> Parser Word8
+singleC = single . fromIntegral . ord
 
---
--- resolv anbiguity
---
-oneOf' :: [Char] -> Parser Char
-oneOf' s = oneOf s
-noneOf' :: [Char] -> Parser Char
-noneOf' s = noneOf s
+takeWhilePC :: Maybe String -> (Char -> Bool) -> Parser ByteString
+takeWhilePC s f = takeWhileP s (f . chr . fromIntegral)
 
+takeWhile1PC :: Maybe String -> (Char -> Bool) -> Parser ByteString
+takeWhile1PC s f = takeWhile1P s (f . chr . fromIntegral)
 
+digitToIntB :: Word8 -> Int
+digitToIntB b = digitToInt (chr (fromIntegral b))
+
+oneOf' :: ByteString -> Parser (Token ByteString)
+oneOf' cs = satisfy (`B.elem` cs)
+noneOf' :: ByteString -> Parser (Token ByteString)
+noneOf' cs = satisfy (`B.notElem` cs)
 --
 -- Local Variables:
 -- coding: utf-8

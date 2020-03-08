@@ -72,11 +72,11 @@ calcExpr' labelDef wa@(WordAddr _ pos) expr =
     case expr of
       Leaf (WithPos _ (Number n)) -> return (Num (fromIntegral n))
       Leaf (WithPos off (Identifier s)) ->
-          if s == "."
+          if s == sToBs "."
           then return (Address pos)  -- `.' for current address
           else ifLabelAllowed off (\ld ->
-            case findLabel ld s of
-              Nothing -> evalError off $ printf "%s: not defined" s
+            case findLabel ld (bsToS s) of
+              Nothing -> evalError off $ printf "%s: not defined" (bsToS s)
               Just a -> return (Address a))
 
       Leaf (WithPos off (LocalLabelRef dir n)) ->
