@@ -98,13 +98,9 @@ generate pos ld lns =
     concatBytes (Words w:xs) = w : concatBytes xs
     concatBytes cs = let (bs, rest) = span isBytes cs
                      in
-                         (map bytesToWord $ pairs $ concat $ map mcBytes bs) : concatBytes rest
-    pairs [] = []
-    pairs [a] = [[a]]
-    pairs (a:b:xs) = [a,b] : pairs xs
-    bytesToWord [a] = bytesToWord [a,0]
-    bytesToWord [a,b] = (shift (toWord16 a) 8) .|. (toWord16 b)
-    bytesToWord _ = error "Can't happen"
+                         (map bytesToWord $ pairs 0 $ concat $ map mcBytes bs) : concatBytes rest
+
+    bytesToWord (a,b) = (shift (toWord16 a) 8) .|. (toWord16 b)
 
 generateOne :: [LabelDef] -> CodeAddr -> Statement -> Parser (CodeAddr, MachineCode)
 generateOne ld pos statement@(Statement (WithPos nmemonicOffset nmemonic) opr) =
