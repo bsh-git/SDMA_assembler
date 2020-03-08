@@ -7,11 +7,17 @@ test1: expect/allinstructions.dat allinstructions.asm
 	diff -u expect/allinstructions.dat output
 
 
+test2: expect/allinstructions.dat src-with-cpp.S
+	cpp --traditional src-with-cpp.S | stack run -- --format data > output
+	diff -u expect/allinstructions.dat output
+
 expect/allinstructions.dat: expect/allinstructions.c c2dat.sh
 	./c2dat.sh $< > tmp
 	mv tmp $@
 
 expect/allinstructions.c: allinstructions.asm Makefile
+	[ -f "${SDMA_ASM_PL}" ] || exit 1
 	perl $(PERLOPT) $(SDMA_ASM_PL) $< | sed -n '/CUT HERE/,$$p' | sed '/CUT HERE/d' > tmp
+	[ ! -z tmp ] || exit 1
 	mv tmp $@
 

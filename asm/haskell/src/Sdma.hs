@@ -11,7 +11,6 @@ import System.IO
 import Sdma.Parser
 import Sdma.Codegen
 import Sdma.Cpp
-import Sdma.Base
 
 -- import Debug.Trace
 

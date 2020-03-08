@@ -6,7 +6,6 @@
 module Sdma.Test.Parser where
 
 import Test.HUnit hiding (Label)
---import System.Environment
 import Sdma.Parser
 import Data.Word
 import Sdma.Base

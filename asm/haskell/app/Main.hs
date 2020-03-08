@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TupleSections #-}
 --
 --
@@ -16,7 +17,6 @@ import System.Console.GetOpt
 import Sdma
 import Sdma.Base
 import Sdma.Cpp
-
 
 data AssemblerOptions = AssemblerOptions {
       optOutputFormat :: OutputFormat
@@ -93,11 +93,9 @@ main = do
     main' (opts, args) =
         if optHelp opts
         then putStr =<< usage
-        else
-          case length args of
-            0 -> B.hGetContents stdin >>= processFile  opts "(stdin)"
-            1 -> B.readFile (head args) >>= processFile  opts (head args)
-            _ -> die $ "too many argments" ++ (show args)
+        else do
+          (contents, filename) <- getInput opts args
+          processFile opts filename contents
 
     usage = getProgName >>= \p -> return $ usageInfo (p ++ " [options] [input]") options
     optError msg = usage >>= \u -> die (msg ++ "\n" ++ u)
@@ -106,6 +104,16 @@ die :: String -> IO ()
 die msg = do
     progname <- getProgName
     System.Exit.die (progname ++ ": " ++ msg)
+
+
+getInput :: AssemblerOptions -> [String] -> IO (ByteString, FilePath)
+getInput opts args =
+    case length args of
+      0 -> B.hGetContents stdin >>= return . (,"(stdin)")
+      1 -> B.readFile (head args) >>= return . (,(head args))
+      _ -> do
+          die ("too many argments" ++ (show args))
+          return ("","")
 
 
 processFile :: AssemblerOptions -> FilePath -> ByteString -> IO ()
