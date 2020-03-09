@@ -3,6 +3,10 @@
 #   all instructions
 #
 
+#include "defs.h"
+	
+#define  V	(15+17-1)	/* 31 */
+	
 start:
 	add r0, r1
 	add r7, r6
@@ -28,7 +32,7 @@ label1:
 	asr1 r0
 
 	bclri r6, 4
-	bclri r7, 31
+	bclri r7, V
 
 	bdf label1
 	bdf label2
@@ -74,7 +78,7 @@ label1:
 	jmp 0x3000
 	jmpr r5
 
-	jsr 0x1234
+	jsr SUBR
 	jsrr r4
 
 	ld r3, (r4, 31)
@@ -89,20 +93,20 @@ label1:
 
 	ldrpc r6
 
-	loop exit, 0
-	loop exit, 1
-	loop exit, 2
-	loop exit, 3
+	loop exit, ClearSFDF
+	loop exit, ClearDF
+	loop exit, ClearSF
+	loop exit, KeepSFDF
 
 	lsl1 r4
 	lsr1 r5
 
 	mov  r3, r3
 
-	notify 1     # set HI
-	notify 2     # clear HE
-	notify 3     # clear HE, set HI
-	notify 4     # clear EP
+	notify SetHI     # set HI
+	notify ClearHE     # clear HE
+	notify SetHI|ClearHE     # clear HE, set HI
+	notify ClearEP     # clear EP
 
 	or r2, r6
 

@@ -21,8 +21,10 @@ import Sdma.Cpp
 data AssemblerOptions = AssemblerOptions {
       optOutputFormat :: OutputFormat
     , optLoadAddr :: Maybe Word16
+{- notyet
     , optCppCommand :: String
     , optNoCpp :: Bool
+-}
     , optHelp :: Bool
     }
     deriving (Show, Eq)
@@ -34,8 +36,10 @@ defaultOptions :: AssemblerOptions
 defaultOptions = AssemblerOptions
     { optOutputFormat = C
     , optLoadAddr = Nothing
+{-
     , optCppCommand = "cpp --traditional"
     , optNoCpp = False
+-}
     , optHelp = False
     }
 
@@ -54,13 +58,15 @@ options =
              "output format"
     , Option ['a'] ["addr"] (ReqArg LoadAddr "ADDR")
              "load address. relocatable code is generated if ommitted (not yet)"
+{- notyet
     , Option ['C'] ["cpp-command"] (ReqArg CppCommand "COMMAND")
              "preprocessor command"
     , Option [] ["no-cpp"] (NoArg NoCpp)
              "do not pre-process"
+-}
     , Option ['?'] ["help"] (NoArg Help) "show help"
     ]
-    
+
 getOptions :: [String] -> Either String (AssemblerOptions, [String])
 getOptions args = do
     (opts, a) <- case getOpt RequireOrder options args of
@@ -78,11 +84,13 @@ getOptions args = do
                                  "linux" -> return $ ao { optOutputFormat = Linux }
                                  "data" -> return $ ao { optOutputFormat = Data }
                                  _ -> Left $ "Unknown format : " ++ s
-                     LoadAddr s -> return $ ao { optLoadAddr = Just (read s::Word16) }
+                     LoadAddr s -> return $ ao { optLoadAddr = Just (read s::Word16) } -- XXX validate address
+                     Help -> return $ ao { optHelp = True }
+                     {-
                      CppCommand s -> return $ ao { optCppCommand = s }
                      NoCpp -> return $ ao { optNoCpp = True }
-                     Help -> return $ ao { optHelp = True }
-                     
+                     -}
+
 
 
 main :: IO ()
@@ -120,7 +128,7 @@ processFile :: AssemblerOptions -> FilePath -> ByteString -> IO ()
 processFile opts filename contents = do
     spi <- cppMarks filename contents
 
-    either reportError outputCodes $ assembleFile filename contents Nothing spi
+    either reportError outputCodes $ assembleFile filename contents (optLoadAddr opts) spi
 
   where
       reportError e = do
