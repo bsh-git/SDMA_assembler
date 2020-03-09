@@ -150,33 +150,40 @@ parseOperand fn input = parse (blanks >> operand <* eof) fn input
 
 operatorTable :: [[Operator Parser AsmExpr]]
 operatorTable =
-    [ [ prefix '-'
-      , prefix '+'
+    [ [ prefix "-"
+      , prefix "+"
+      , prefix "~"
       ]
-    , [ binary '*'
-      , binary '/'
-      , binary '%'
+    , [ binary "*"
+      , binary "/"
+      , binary "%"
       ]
-    , [ binary '+'
-      , binary '-'
+    , [ binary "+"
+      , binary "-"
       ]
+    , [ binary "<<"
+      , binary ">>"
+      ]
+    , [ binary "&"]
+    , [ binary "^"]
+    , [ binary "|"]
     ]
 
-prefix :: Char -> Operator Parser AsmExpr
-prefix c = Prefix (unary (singleC c)) -- (apply unary (char c))
+prefix :: ByteString -> Operator Parser AsmExpr
+prefix s = Prefix (unary (chunk s)) -- (apply unary (char c))
   where
-    unary op = withPosExpr UnaryExpr c op
+    unary op = withPosExpr UnaryExpr s op
 
-binary :: Char -> Operator Parser AsmExpr
-binary  c = InfixL (binaryExpr (singleC c))
+binary :: ByteString -> Operator Parser AsmExpr
+binary  s = InfixL (binaryExpr (chunk s))
   where
-    binaryExpr op = withPosExpr BinaryExpr c op
+    binaryExpr op = withPosExpr BinaryExpr s op
 
-withPosExpr expr c op = do
+withPosExpr expr s op = do
   off <- getOffset
   _ <- op
   sc
-  return $ expr (WithPos off [c])
+  return $ expr (WithPos off (bsToS s))
 
 expr :: Parser AsmExpr
 expr = makeExprParser term operatorTable
@@ -281,9 +288,9 @@ lexeme p = do
 eols :: Parser AsmToken
 eols = some eol >> return Eol
 
+-- not used
 symbolToken :: Parser AsmToken
---symbolToken = oneOf "()-+*%/;" >>= (return . Symbol . B.singleton)
-symbolToken = satisfy (`B.elem` "()-+*%/;") >>= (return . Symbol . B.singleton)
+symbolToken = satisfy (`B.elem` "()-+*%/<>&|~;") >>= (return . Symbol . B.singleton)
 
 identifier :: Parser AsmToken
 identifier = Identifier `fmap` identifierChars

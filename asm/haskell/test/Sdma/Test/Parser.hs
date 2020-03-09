@@ -109,6 +109,19 @@ testParser = TestList
                                                        (Leaf' (Number 5))
                                                       )
                      , testExprS "0xdeadbeef" (Leaf' (Number 0xdeadbeef))
+                     , testExprS "123 & 456 | ~78" (BinaryExpr' "|"
+                                                    (BinaryExpr' "&"
+                                                     (Leaf' (Number 123))
+                                                     (Leaf' (Number 456)))
+                                                    (UnaryExpr' "~"
+                                                     (Leaf' (Number 78))))
+                     , testExprS "123 << 5 >> 1+3" (BinaryExpr' ">>"
+                                                    (BinaryExpr' "<<"
+                                                     (Leaf' (Number 123))
+                                                     (Leaf' (Number 5)))
+                                                    (BinaryExpr' "+"
+                                                     (Leaf' (Number 1))
+                                                     (Leaf' (Number 3))))
                      ]
         , TestLabel "test for statement" $
             TestList [ testEmptyLine "" []
