@@ -7,7 +7,7 @@ maintainer:          "bessho@genetec.co.jp"
 copyright:           "2020 Genetec corp."
 
 extra-source-files:
-- ../../README.md
+- README.md
 
 # Metadata used when publishing your package
 # synopsis:            Short description of your package
