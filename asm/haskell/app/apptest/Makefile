@@ -7,7 +7,7 @@ alltests: test01 \
 	test03-00 test03-01 test03-02
 
 test01: expect/allinstructions.dat allinstructions.asm
-	stack run -- --format data allinstructions.asm | tee output
+	stack run -- --format data allinstructions.asm > output
 	diff -u expect/allinstructions.dat output
 
 
@@ -28,17 +28,23 @@ test03-02: expect/address-test-00.dat address-test-02.asm
 	diff -u expect/address-test-00.dat output
 
 test03-03: expect/address-test-00.dat address-test-00.asm
-	(cat address-test-00.asm; echo "jmp label1; jsr label2") | stack run -- -a 0x0400 --format data > output
-	(cat expect/address-test-00.dat; echo 8403c404) | diff -u - output
+	(cat address-test-00.asm; echo "jmp label1; jsr label2; .dc.l .+0x1000") | stack run -- -a 0x0400 --format data > output
+	(cat expect/address-test-00.dat; echo 8403c404; echo 0000140a) | diff -u - output
+
+
+test04: expect/allinstructions.c
+	stack run -- --format linux allinstructions.asm > output
+	diff -u expect/allinstructions.c output
 
 
 expect/allinstructions.dat: expect/allinstructions.c c2dat.sh
+	[ -d expect ] || mkdir expect
 	./c2dat.sh $< > tmp
 	mv tmp $@
 
 expect/allinstructions.c: allinstructions.asm Makefile
 	[ -f "${SDMA_ASM_PL}" ] || exit 1
-	perl $(PERLOPT) $(SDMA_ASM_PL) $< | sed -n '/CUT HERE/,$$p' | sed '/CUT HERE/d' > tmp
+	perl $(PERLOPT) $(SDMA_ASM_PL) $< | sed -n '/CUT HERE/,$$p' | sed -n '3,$$p' > tmp
 	[ ! -z tmp ] || exit 1
 	mv tmp $@
 

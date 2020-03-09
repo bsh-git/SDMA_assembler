@@ -11,6 +11,7 @@ import System.IO
 import Sdma.Parser
 import Sdma.Codegen
 import Sdma.Cpp
+import Sdma.Base
 
 -- import Debug.Trace
 
@@ -22,21 +23,36 @@ assembleFile filename source startAddr spi = do
     reportErrors = Left . concat . (map  errorBundlePretty) . (splitErrorBundle spi)
     start = maybe (WordAddr Rel 0) (WordAddr Abs) startAddr
 
-writeCodes :: FilePath -> Handle -> [Word32] -> IO ()
-writeCodes sourceFilename outputHandle codes = do
-    hPutStrLn outputHandle $ "/* " ++ sourceFilename ++ " */"
-    hPutStrLn outputHandle "static const uint16_t sdma_code[] = {"
-    writeWords codes
+writeCodes :: AssemblerOptions -> FilePath -> Handle -> [Word32] -> IO ()
+writeCodes opts sourceFilename outputHandle codes = do
+    if Linux == optOutputFormat opts then writeCodesLinux else writeCodes'
+
     hPutStrLn outputHandle "};"
 
   where
-    writeWords :: [Word32] -> IO ()
-    writeWords [] = return ()
-    writeWords w = writeWords' (splitAt 8 w)
-    writeWords' (ws, rest) = do
+    writeCodes' = do
+      hPutStrLn outputHandle $ "/* " ++ sourceFilename ++ " " ++ addrInfo ++ " */"
+      hPutStrLn outputHandle "static const uint32_t sdma_code[] = {"
+      writeWords "\t" codes
+
+    addrInfo = case optLoadAddr opts of
+      Nothing -> ": relacatable"
+      Just a -> printf "at %#x" a
+
+
+    writeCodesLinux = do
+      let l = show $ length  codes
+      hPutStrLn outputHandle $ "static const int sdma_code_length = " ++ l ++ ";"
+      hPutStrLn outputHandle $ "static const u32 sdma_code[" ++ l ++ "] = {"
+      writeWords "  " codes
+
+    writeWords :: String -> [Word32] -> IO ()
+    writeWords _ [] = return ()
+    writeWords p w = writeWords' p (splitAt 8 w)
+    writeWords' prefix (ws, rest) = do
         hPutStrLn outputHandle $
-          "\t" ++ (intercalate " " $ map  (\w -> (printf "%#10x," w) :: String) ws)
-        writeWords rest
+          prefix ++ (intercalate " " $ map  (\w -> (printf "%#010x," w) :: String) ws)
+        writeWords prefix rest
 
 
 writeCodesAsData :: FilePath -> Handle -> [Word32] -> IO ()

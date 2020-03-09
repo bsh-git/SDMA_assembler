@@ -18,19 +18,6 @@ import Sdma
 import Sdma.Base
 import Sdma.Cpp
 
-data AssemblerOptions = AssemblerOptions {
-      optOutputFormat :: OutputFormat
-    , optLoadAddr :: Maybe Word16
-{- notyet
-    , optCppCommand :: String
-    , optNoCpp :: Bool
--}
-    , optHelp :: Bool
-    }
-    deriving (Show, Eq)
-
-data OutputFormat = C | Linux | Data
-                  deriving (Show, Eq)
 
 defaultOptions :: AssemblerOptions
 defaultOptions = AssemblerOptions
@@ -141,8 +128,7 @@ processFile opts filename contents = do
                         (pairs 0 codes))
       outputCodes' = outputCodes'' (optOutputFormat opts)
       outputCodes'' Data codes = writeCodesAsData filename stdout codes
-      outputCodes'' C codes = writeCodes filename stdout codes
-      outputCodes'' Linux codes = writeCodes filename stdout codes
+      outputCodes'' _ codes = writeCodes opts filename stdout codes
 
 --
 -- Local Variables:
