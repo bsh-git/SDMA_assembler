@@ -16,43 +16,51 @@ import Sdma.Base
 -- import Debug.Trace
 
 assembleFile :: FilePath -> ByteString -> Maybe Word16 -> [SourcePosInfo] -> Either String [Word16]
-assembleFile filename source startAddr spi = do
+assembleFile filename source startAddr spi =
     either reportErrors Right $ parse (asmFile >>= gen) filename source
   where
     gen insn = generate start (fixLabels start insn) insn
     reportErrors = Left . concat . (map  errorBundlePretty) . (splitErrorBundle spi)
     start = maybe (WordAddr Rel 0) (WordAddr Abs) startAddr
 
-writeCodes :: AssemblerOptions -> FilePath -> Handle -> [Word32] -> IO ()
+writeCodes :: AssemblerOptions -> FilePath -> Handle -> [Word16] -> IO ()
 writeCodes opts sourceFilename outputHandle codes = do
-    if Linux == optOutputFormat opts then writeCodesLinux else writeCodes'
+    writeCodes'
+    hPutStrLn outputHandle "};"
+  where
+    writeCodes' = do
+      hPutStrLn outputHandle $ "/* " ++ sourceFilename ++ " " ++ addrInfo ++ " */"
+      hPutStrLn outputHandle "static const uint16_t sdma_code[] = {"
+      writeWords outputHandle "\t" "%#06x," codes
 
+    addrInfo = case optLoadAddr opts of
+      Nothing -> ": relocatable"
+      Just a -> printf "at %#x" a
+
+
+
+
+writeCodesLinux :: AssemblerOptions -> FilePath -> Handle -> [Word32] -> IO ()
+writeCodesLinux opts sourceFilename outputHandle codes = do
+    writeCodes'
     hPutStrLn outputHandle "};"
 
   where
     writeCodes' = do
-      hPutStrLn outputHandle $ "/* " ++ sourceFilename ++ " " ++ addrInfo ++ " */"
-      hPutStrLn outputHandle "static const uint32_t sdma_code[] = {"
-      writeWords "\t" codes
-
-    addrInfo = case optLoadAddr opts of
-      Nothing -> ": relacatable"
-      Just a -> printf "at %#x" a
-
-
-    writeCodesLinux = do
       let l = show $ length  codes
       hPutStrLn outputHandle $ "static const int sdma_code_length = " ++ l ++ ";"
       hPutStrLn outputHandle $ "static const u32 sdma_code[" ++ l ++ "] = {"
-      writeWords "  " codes
+      writeWords outputHandle "  " "%#010x," codes
 
-    writeWords :: String -> [Word32] -> IO ()
-    writeWords _ [] = return ()
-    writeWords p w = writeWords' p (splitAt 8 w)
-    writeWords' prefix (ws, rest) = do
-        hPutStrLn outputHandle $
-          prefix ++ (intercalate " " $ map  (\w -> (printf "%#010x," w) :: String) ws)
-        writeWords prefix rest
+
+writeWords :: (PrintfArg a) => Handle -> String -> String -> [a] -> IO ()
+writeWords _ _ _ [] = return ()
+writeWords h p fmt codes = writeWords' (splitAt 8 codes)
+  where
+    writeWords' (ws, rest) = do
+      hPutStrLn h $
+        p ++ (intercalate " " $ map  (\w -> (printf fmt w) :: String) ws)
+      writeWords h p fmt rest
 
 
 writeCodesAsData :: FilePath -> Handle -> [Word32] -> IO ()

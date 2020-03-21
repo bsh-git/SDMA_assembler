@@ -123,12 +123,19 @@ processFile opts filename contents = do
           hPutStrLn stderr e
           die "abort."
 
-      outputCodes codes =
-          outputCodes' (map (\(h,l) -> shift (toWord32 h) 16 .|. toWord32 l)
+      outputCodes = outputCodes' (optOutputFormat opts)
+      outputCodes' Data = (writeCodesAsData filename stdout) . to32
+      outputCodes' Linux = (writeCodesLinux opts filename stdout) . to32
+      outputCodes' _ = writeCodes opts filename stdout
+
+      to32 codes = (map (\(h,l) -> shift (toWord32 h) 16 .|. toWord32 l)
                         (pairs 0 codes))
+
+{-
       outputCodes' = outputCodes'' (optOutputFormat opts)
       outputCodes'' Data codes = writeCodesAsData filename stdout codes
       outputCodes'' _ codes = writeCodes opts filename stdout codes
+-}
 
 --
 -- Local Variables:
