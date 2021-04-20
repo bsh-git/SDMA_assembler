@@ -37,7 +37,7 @@ library:
   source-dirs: src
 
 executables:
-  sdmaasm-exe:
+  sdmaasm:
     main:                Main.hs
     source-dirs:         app
     ghc-options:
