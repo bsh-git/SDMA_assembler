@@ -17,9 +17,9 @@ locate the program to ADDRESS.  Position independent codes can be assembled with
 - -F FORMAT, --format FORMAT
 
 Output format.
-       - c (default): generate a C program
-       - linux: generate a C program compatible with sdma_asm.pl
-       - data: outputs sequence of 32-bit hexadecimal numbers
+- c (default): generate a C program
+- linux: generate a C program compatible with sdma_asm.pl
+- data: outputs sequence of 32-bit hexadecimal numbers
 
 if *inputfile* is ommitted, stdin is read.
 
