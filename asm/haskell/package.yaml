@@ -28,7 +28,7 @@ dependencies:
 - list-singleton
 - mtl
 - bytestring
-- regex-pcre
+- regex-pcre-builtin
 - array
 - process
 - unix
